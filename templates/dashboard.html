@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="alert alert-success">
+    Welcome to your Dashboard, <strong>{{ currentUserNAME }}</strong>!
+    Your role is: <strong>{{ currentUserRole }}</strong>.
+</div>
+
+{# ==== ADMIN PANEL ==== #}
+{% if roleID == 1 %}
+    <h3 class="mt-4 mb-3">Admin Management Panel</h3>
+
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card p-3">
+                <h6>Total Doctors</h6>
+                <p class="fs-3 mb-0">{{ totalDoctors or 0 }}</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card p-3">
+                <h6>Total Patients</h6>
+                <p class="fs-3 mb-0">{{ totalPatients or 0 }}</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card p-3">
+                <h6>Total Appointments</h6>
+                <p class="fs-3 mb-0">{{ totalAppts or 0 }}</p>
+            </div>
+        </div>
+    </div>
+
+    <ul class="list-group">
+        <li class="list-group-item">
+            <a href="{{ url_for('listDoctors') }}">Manage Doctors (CRUD)</a>
+        </li>
+        <li class="list-group-item">
+            <a href="{{ url_for('listPatientAppointments') }}">View All Appointments</a>
+        </li>
+        <li class="list-group-item text-muted">
+            Search Users (TODO)
+        </li>
+    </ul>
+
+{# ==== DOCTOR PANEL ==== #}
+{% elif roleID == 2 %}
+    <h3 class="mt-4">Doctor Panel</h3>
+    <ul class="list-group">
+        <li class="list-group-item">
+            <a href="{{ url_for('listPatientAppointments') }}">
+                View My Scheduled Appointments
+            </a>
+        </li>
+        <li class="list-group-item text-muted">
+            Update Availability (TODO)
+        </li>
+    </ul>
+
+{# ==== PATIENT PANEL ==== #}
+{% elif roleID == 3 %}
+    <h3 class="mt-4 mb-3">Patient Panel</h3>
+
+    <h5>Available Departments / Specializations</h5>
+    {% if departments %}
+        <ul>
+            {% for dept in departments %}
+                <li>{{ dept }}</li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p class="text-muted">No doctors added yet.</p>
+    {% endif %}
+
+    <ul class="list-group mt-3">
+        <li class="list-group-item">
+            <a href="{{ url_for('bookAppointment') }}">Book New Appointment</a>
+        </li>
+        <li class="list-group-item">
+            <a href="{{ url_for('listPatientAppointments') }}">View Appointment History</a>
+        </li>
+    </ul>
+{% endif %}
+{% endblock %}

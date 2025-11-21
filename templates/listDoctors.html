@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Doctors{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Manage Doctors</h2>
+<a href="{{ url_for('addDoctor') }}" class="btn btn-primary mb-3">Add New Doctor</a>
+
+{% if doctorList %}
+<table class="table table-striped table-hover">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Username</th>
+            <th>Specialization</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for doc in doctorList %}
+        <tr>
+            <td>{{ doc.id }}</td>
+            <td>{{ doc.name }}</td>
+            <td>{{ doc.username }}</td>
+            <td>{{ doc.specialization }}</td>
+            <td>
+                <a href="{{ url_for('editDoctor', userID=doc.id) }}" class="btn btn-sm btn-warning me-2">Edit</a>
+                
+                <form method="POST" action="{{ url_for('deleteUser', userID=doc.id) }}" style="display:inline;">
+                    <button type="submit" class="btn btn-sm btn-danger" 
+                            onclick="return confirm('Are you sure you want to blacklist/delete {{ doc.name }}?');">
+                        Delete
+                    </button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="alert alert-info">No doctors found in the system.</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Book Appointment{% endblock %}
+
+{% block content %}
+<a href="{{ url_for('dashboardPage') }}"
+   class="btn btn-outline-secondary btn-sm mb-3">
+    &larr; Back to Dashboard
+</a>
+<h2 class="mb-4">Book a New Appointment</h2>
+
+{% if doctorList %}
+<form method="POST" action="{{ url_for('bookAppointment') }}"> 
+    
+    <div class="mb-3">
+        <label for="doctorID" class="form-label">Select Doctor:</label>
+        <select class="form-select" id="doctorID" name="doctorID" required>
+            {% for doc in doctorList %}
+            <option value="{{ doc.id }}">{{ doc.name }} ({{ doc.specialization }})</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="mb-3">
+        <label for="date" class="form-label">Date:</label>
+        <input type="date" class="form-control" id="date" name="date" required>
+    </div>
+    
+    <div class="mb-3">
+        <label for="time" class="form-label">Time (e.g., 10:00, 14:30):</label>
+        <input type="time" class="form-control" id="time" name="time" required>
+    </div>
+    
+    <button type="submit" class="btn btn-success">Confirm Booking</button>
+    <a href="{{ url_for('dashboardPage') }}" class="btn btn-secondary">Back to Dashboard</a>
+</form>
+{% else %}
+<div class="alert alert-danger">No doctors are currently available for booking.</div>
+{% endif %}
+
+{% endblock %}

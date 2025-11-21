@@ -1,0 +1,8 @@
+body {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+table.table th,
+table.table td {
+    vertical-align: middle;
+}

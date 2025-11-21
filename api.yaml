@@ -1,0 +1,291 @@
+openapi: 3.0.0
+info:
+  title: MAD-1 Hospital Management System API
+  version: 1.0.0
+  description: >
+    Simple Flask-based Hospital Management System for IITM MAD-1 project.
+    This specification documents the main HTTP endpoints used by the web application.
+servers:
+  - url: http://localhost:5000
+
+tags:
+  - name: auth
+    description: Authentication & sessions
+  - name: admin
+    description: Admin management endpoints
+  - name: patient
+    description: Patient-side appointment endpoints
+  - name: doctor
+    description: Doctor-side appointment endpoints
+
+paths:
+  /login:
+    post:
+      tags: [auth]
+      summary: Login user
+      description: >
+        Authenticates a user (Admin / Doctor / Patient) using username and password.
+        On success, a session cookie is created.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+              required: [username, password]
+      responses:
+        "302":
+          description: Redirects to /dashboard on success, or /login with flash error on failure.
+
+  /registerPatient:
+    post:
+      tags: [auth]
+      summary: Register a new patient
+      description: Registers a new patient user (role = 3).
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                name:
+                  type: string
+              required: [username, password, name]
+      responses:
+        "302":
+          description: Redirects to /login after successful registration, or re-renders with error flash.
+
+  /dashboard:
+    get:
+      tags: [auth]
+      summary: Dashboard for current user
+      description: >
+        Returns a role-based dashboard:
+        - Admin: summary cards (total doctors, patients, appointments)
+        - Doctor: quick links to view appointments
+        - Patient: list of available departments and quick links.
+      responses:
+        "200":
+          description: HTML dashboard for the logged-in user.
+        "302":
+          description: Redirects to /login if not authenticated.
+
+  /logout:
+    get:
+      tags: [auth]
+      summary: Logout current user
+      responses:
+        "302":
+          description: Logs out user and redirects to /login.
+
+  /admin/doctors:
+    get:
+      tags: [admin]
+      summary: List all doctors
+      description: Returns a page showing all users with role = DOCTOR.
+      responses:
+        "200":
+          description: HTML view listing doctors.
+        "302":
+          description: Redirect to /dashboard if non-admin.
+
+  /admin/doctors/add:
+    post:
+      tags: [admin]
+      summary: Add a new doctor
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                name:
+                  type: string
+                specialization:
+                  type: string
+              required: [username, password, name]
+      responses:
+        "302":
+          description: >
+            Redirects to /admin/doctors on success or back to the form with
+            flash error if username already exists.
+
+  /admin/doctors/edit/{userID}:
+    post:
+      tags: [admin]
+      summary: Edit doctor details
+      parameters:
+        - in: path
+          name: userID
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                specialization:
+                  type: string
+                password:
+                  type: string
+                  description: New password (optional)
+      responses:
+        "302":
+          description: Redirects to /admin/doctors after update.
+
+  /admin/users/delete/{userID}:
+    post:
+      tags: [admin]
+      summary: Delete a user and their appointments
+      parameters:
+        - in: path
+          name: userID
+          required: true
+          schema:
+            type: integer
+      responses:
+        "302":
+          description: >
+            Redirects to /admin/doctors after deleting user (except Super Admin).
+            Associated appointments are also deleted.
+
+  /patient/appointments/book:
+    post:
+      tags: [patient]
+      summary: Book a new appointment
+      description: >
+        Creates a new appointment for the current patient with a selected doctor
+        if the time slot is free and not in the past.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                doctorID:
+                  type: integer
+                date:
+                  type: string
+                  example: "2025-11-21"
+                time:
+                  type: string
+                  example: "10:00"
+              required: [doctorID, date, time]
+      responses:
+        "302":
+          description: >
+            Redirects to /patient/appointments on successful booking,
+            or back to form with flash error (past date or double booking).
+
+  /patient/appointments:
+    get:
+      tags: [patient]
+      summary: List appointments for current user
+      description: >
+        Returns appointment list depending on role:
+        - Patient: only their appointments
+        - Doctor: appointments assigned to them
+        - Admin: all appointments.
+      responses:
+        "200":
+          description: HTML table view of appointments.
+
+  /appointments/cancel/{apptID}:
+    post:
+      tags: [patient]
+      summary: Cancel an appointment
+      parameters:
+        - in: path
+          name: apptID
+          required: true
+          schema:
+            type: integer
+      responses:
+        "302":
+          description: >
+            Updates status to 'Cancelled' (if authorized patient or admin) and
+            redirects back to /patient/appointments.
+
+  /doctor/appointments/{apptID}:
+    post:
+      tags: [doctor]
+      summary: Update appointment status and treatment
+      parameters:
+        - in: path
+          name: apptID
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [Booked, Completed, Cancelled]
+                diagnosis:
+                  type: string
+                prescription:
+                  type: string
+      responses:
+        "302":
+          description: Redirects to the appointments list after update.
+
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        username: { type: string }
+        password: { type: string }
+        name: { type: string }
+        email: { type: string }
+        role:
+          type: integer
+          description: "1=Admin, 2=Doctor, 3=Patient"
+        specialization:
+          type: string
+          nullable: true
+
+    Appointment:
+      type: object
+      properties:
+        id: { type: integer }
+        doctor_id: { type: integer }
+        patient_id: { type: integer }
+        date: { type: string }
+        time: { type: string }
+        status:
+          type: string
+          enum: [Booked, Completed, Cancelled]
+        diagnosis:
+          type: string
+          nullable: true
+        prescription:
+          type: string
+          nullable: true

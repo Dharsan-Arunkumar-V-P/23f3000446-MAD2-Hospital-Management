@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Doctor{% endblock %}
+
+{% block content %}
+<a href="{{ url_for('dashboardPage') }}"
+   class="btn btn-outline-secondary btn-sm mb-3">
+    &larr; Back to Dashboard
+</a>
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <h2 class="mb-4">Edit Doctor: {{ docUser.name }}</h2>
+        <form method="POST">
+            
+            <div class="mb-3">
+                <label for="name" class="form-label">Full Name:</label>
+                <input type="text" class="form-control" id="name" name="name" value="{{ docUser.name }}" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="username" class="form-label">Username:</label>
+                <input type="text" class="form-control" id="username" name="username" value="{{ docUser.username }}" readonly disabled>
+            </div>
+            
+            <div class="mb-3">
+                <label for="specialization" class="form-label">Specialization:</label>
+                <input type="text" class="form-control" id="specialization" name="specialization" value="{{ docUser.specialization }}" required>
+            </div>
+           
+            <hr>
+            <div class="mb-3">
+                <label for="password" class="form-label">New Password (Leave blank to keep old one):</label>
+                <input type="password" class="form-control" id="password" name="password" placeholder="Enter new password">
+            </div>
+            
+            <button type="submit" class="btn btn-warning">Update Doctor</button>
+            <a href="{{ url_for('listDoctors') }}" class="btn btn-secondary">Cancel</a>
+        </form>
+    </div>
+</div>
+{% endblock %}
