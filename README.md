@@ -1,6 +1,6 @@
-# MAD-1 Hospital Management System (HMS)
+# MAD-2 Hospital Management System Version 2 (HMSV2)
 
-A simple Hospital Management System built as part of the IITM BS Degree **MAD-1** project.
+This builds on the MAD-1 HMS project and extends it with advanced features such as improved appointment history, doctor availability management, better architecture, and enhanced documentation.
 
 The application supports three roles:
 
