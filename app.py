@@ -6,6 +6,7 @@ from flask_bcrypt import Bcrypt
 from functools import wraps
 from sqlalchemy import or_
 import datetime
+from authutils import adminrequired, doctorrequired, patientrequired
 
 #CONSTANTS : USER ROLES
 ROLE_ADMIN = 1
@@ -204,7 +205,7 @@ def createApp():
     #ROUTE : DOCTOR MANAGEMENT
 
     @appObj.route('/admin/doctors')
-    @adminRequired
+    @adminrequired
     @login_required
     def listDoctors():
         # PROCESS: Query all Doctors (Role 2)
@@ -213,7 +214,7 @@ def createApp():
         return render_template('listDoctors.html', doctorList=doctorList)
 
     @appObj.route('/admin/doctors/add', methods=['GET', 'POST'])
-    @adminRequired
+    @adminrequired
     @login_required
     def addDoctor():
         if request.method == 'POST':
@@ -249,7 +250,7 @@ def createApp():
         return render_template('addDoctor.html')
 
     @appObj.route('/admin/doctors/edit/<int:userID>', methods=['GET', 'POST'])
-    @adminRequired
+    @adminrequired
     @login_required
     def editDoctor(userID):
         # PROCESS 1: Get user to edit
@@ -278,7 +279,7 @@ def createApp():
         return render_template('editDoctor.html', docUser=docUser)
 
     @appObj.route('/admin/users/delete/<int:userID>', methods=['POST'])
-    @adminRequired
+    @adminrequired
     @login_required
     def deleteUser(userID):
         # PROCESS 1: Get user to delete
@@ -388,6 +389,7 @@ def createApp():
 
     @appObj.route('/doctor/appointments/<int:apptID>', methods=['GET', 'POST'])
     @login_required
+    @patientrequired
     def doctorUpdateAppointment(apptID):
         # PROCESS 1: Role check
         if current_user.role != ROLE_DOCTOR:
