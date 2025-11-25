@@ -1,0 +1,6 @@
+venv/
+__pycache__/
+instance/*.db
+frontend/hmsvue/node_modules/
+.env
+.DS_Store
