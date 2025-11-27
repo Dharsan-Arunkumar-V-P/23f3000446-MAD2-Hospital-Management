@@ -197,28 +197,35 @@ def list_doctors_for_all():
 @require_auth
 @patient_required
 def book_app():
-    # INPUT: current user & request data
     user = request.current_user
     data = request.get_json() or {}
 
-    doctor_id = data.get("doctor_id")
-    date = data.get("date")
-    time = data.get("time")
+    raw_doctor_id = data.get("doctor_id")
+    date = (data.get("date") or "").strip()
+    time = (data.get("time") or "").strip()
 
-    if not doctor_id or not date or not time:
+    if not raw_doctor_id or not date or not time:
         return jsonify({"error": "Doctor, date and time are required"}), 400
 
-    from dba import Appointment
+    # doctor_id comes from JSON, so make sure it's an int
+    try:
+        doctor_id = int(raw_doctor_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid doctor"}), 400
 
-    # PROCESS: check if the slot is already taken for this doctor
+    # make sure doctor actually exists and is a doctor
+    doctor = User.query.get(doctor_id)
+    if not doctor or doctor.role != ROLE_DOCTOR:
+        return jsonify({"error": "Invalid doctor"}), 400
+
+    # check if the slot is already taken for this doctor
     existing = Appointment.query.filter_by(
         doctor_id=doctor_id, date=date, time=time
     ).first()
-
     if existing:
         return jsonify({"error": "This time slot is already booked"}), 400
 
-    # PROCESS: create new appointment
+    # create new appointment
     appt = Appointment(
         doctor_id=doctor_id,
         patient_id=user.id,
@@ -228,6 +235,114 @@ def book_app():
     )
 
     db.session.add(appt)
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print("Error booking appointment:", e)
+        return jsonify(
+            {"error": "Server error while booking appointment"}
+        ), 500
+
+    return jsonify(
+        {
+            "id": appt.id,
+            "date": appt.date,
+            "time": appt.time,
+            "status": appt.status,
+            "doctor_id": appt.doctor_id,
+            "patient_id": appt.patient_id,
+        }
+    ), 201
+
+# ROUTE: Patient → List own appointments
+@app.get("/api/patient/appointments")
+@require_auth
+@patient_required
+def list_patient_appointments():
+    user = request.current_user
+    from dba import Appointment, User
+
+    appts = (
+        Appointment.query.filter_by(patient_id=user.id)
+        .order_by(Appointment.date, Appointment.time)
+        .all()
+    )
+
+    result = []
+    for a in appts:
+        doctor = User.query.get(a.doctor_id)
+        result.append(
+            {
+                "id": a.id,
+                "date": a.date,
+                "time": a.time,
+                "status": a.status,
+                "doctor_name": doctor.name if doctor else "",
+                "doctor_username": doctor.username if doctor else "",
+                "diagnosis": a.diagnosis,
+                "prescription": a.prescription,
+            }
+        )
+
+    return jsonify(result)
+
+# ROUTE: Doctor → List own appointments
+@app.get("/api/doctor/appointments")
+@require_auth
+@doctor_required
+def list_doctor_appointments():
+    user = request.current_user
+    from dba import Appointment, User
+
+    appts = (
+        Appointment.query.filter_by(doctor_id=user.id)
+        .order_by(Appointment.date, Appointment.time)
+        .all()
+    )
+
+    result = []
+    for a in appts:
+        patient = User.query.get(a.patient_id)
+        result.append(
+            {
+                "id": a.id,
+                "date": a.date,
+                "time": a.time,
+                "status": a.status,
+                "patient_name": patient.name if patient else "",
+                "patient_username": patient.username if patient else "",
+                "diagnosis": a.diagnosis,
+                "prescription": a.prescription,
+            }
+        )
+
+    return jsonify(result)
+
+# ROUTE: Doctor → Update appointment
+@app.put("/api/doctor/appointments/<int:aid>")
+@require_auth
+@doctor_required
+def update_appt(aid):
+    user = request.current_user
+    from dba import Appointment
+
+    data = request.get_json() or {}
+
+    appt = Appointment.query.get_or_404(aid)
+
+    # doctor can only edit own appointments
+    if appt.doctor_id != user.id:
+        return jsonify({"error": "Not allowed to modify this appointment"}), 403
+
+    diagnosis = data.get("diagnosis", "").strip()
+    prescription = data.get("prescription", "").strip()
+    status = data.get("status", "").strip() or "Completed"
+
+    appt.diagnosis = diagnosis
+    appt.prescription = prescription
+    appt.status = status
+
     db.session.commit()
 
     return jsonify(
@@ -236,74 +351,69 @@ def book_app():
             "date": appt.date,
             "time": appt.time,
             "status": appt.status,
+            "diagnosis": appt.diagnosis,
+            "prescription": appt.prescription,
         }
     )
 
-# ROUTE: Patient → List own appointments
-@app.get("/api/patient/appointments")
+# ROUTE: Patient → Update own appointment (reschedule / cancel)
+@app.put("/api/patient/appointments/<int:aid>")
 @require_auth
 @patient_required
-def list_patient_appointments():
+def update_patient_appointment(aid):
     user = request.current_user
 
-    appts = Appointment.query.filter_by(patient_id=user.id).all()
+    # find appointment
+    appt = Appointment.query.get_or_404(aid)
+    if appt.patient_id != user.id:
+        return jsonify({"error": "Not allowed to modify this appointment"}), 403
 
-    data = []
-    for a in appts:
-        data.append({
-            "id": a.id,
-            "date": a.date,
-            "time": a.time,
-            "status": a.status,
-            "doctor_name": a.doctor.name if a.doctor else None
-        })
+    data = request.get_json() or {}
 
-    return jsonify(data)
+    new_status = data.get("status")
+    new_date = (data.get("date") or "").strip() if data.get("date") is not None else None
+    new_time = (data.get("time") or "").strip() if data.get("time") is not None else None
 
-# ROUTE: Doctor → List own appointments
-@app.get("/api/doctor/appointments")
-@require_auth
-@doctor_required
-def list_doctor_appointments():
-    user = request.current_user
+    # If rescheduling (date/time change), check for conflicts
+    if new_date or new_time:
+        date = new_date or appt.date
+        time = new_time or appt.time
 
-    appts = Appointment.query.filter_by(doctor_id=user.id).all()
+        existing = (
+            Appointment.query.filter(
+                Appointment.doctor_id == appt.doctor_id,
+                Appointment.date == date,
+                Appointment.time == time,
+                Appointment.id != appt.id,
+            )
+            .first()
+        )
+        if existing:
+            return jsonify({"error": "This time slot is already booked"}), 400
 
-    data = []
-    for a in appts:
-        data.append({
-            "id": a.id,
-            "date": a.date,
-            "time": a.time,
-            "status": a.status,
-            "patient_name": a.patient.name if a.patient else None
-        })
+        appt.date = date
+        appt.time = time
 
-    return jsonify(data)
+    # If status change (e.g. cancel)
+    if new_status:
+        if new_status not in ["Booked", "Cancelled"]:
+            return jsonify({"error": "Invalid status"}), 400
+        appt.status = new_status
 
-# ROUTE: Doctor → Update appointment
-@app.put("/api/doctor/appointments/<int:aid>")
-@require_auth
-@doctor_required
-def update_appt(aid):
-    appt = Appointment.query.get(aid)
-    if not appt:
-        return jsonify({"error": "Not found"}), 404
-
-    data = request.json
-
-    treatment = Treatment(
-        appointment_id=aid,
-        diagnosis=data["diagnosis"],
-        prescription=data["prescription"],
-        notes=data["notes"]
-    )
-
-    db.session.add(treatment)
     db.session.commit()
 
-    return jsonify({"message": "Updated"})
-
+    return jsonify(
+        {
+            "id": appt.id,
+            "date": appt.date,
+            "time": appt.time,
+            "status": appt.status,
+            "doctor_id": appt.doctor_id,
+            "patient_id": appt.patient_id,
+            "diagnosis": appt.diagnosis,
+            "prescription": appt.prescription,
+        }
+    )
 
 # MAIN
 if __name__ == "__main__":

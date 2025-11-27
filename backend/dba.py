@@ -43,14 +43,14 @@ class Department(db.Model):
 # MODEL: Appointment
 class Appointment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    doctor_id = db.Column(db.Integer, db.ForeignKey("user.id"))
-    patient_id = db.Column(db.Integer, db.ForeignKey("user.id"))
-    date = db.Column(db.String(20), nullable=False)
-    time = db.Column(db.String(20), nullable=False)
-    status = db.Column(db.String(50), default="Booked")
-
+    doctor_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    patient_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    date = db.Column(db.String, nullable=False)  
+    time = db.Column(db.String, nullable=False)
+    status = db.Column(db.String, default="Booked")  
+    diagnosis = db.Column(db.String, default="")
+    prescription = db.Column(db.String, default="")
     treatment = db.relationship("Treatment", backref="appointment", uselist=False)
-
 
 # MODEL: Treatment
 class Treatment(db.Model):

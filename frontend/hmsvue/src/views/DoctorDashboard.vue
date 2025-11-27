@@ -1,23 +1,25 @@
 <script setup>
 // SETUP: Imports
 import { ref, onMounted } from "vue";
-import { apiGetMe, apiDoctorListAppointments, apiDoctorUpdateAppointment } from "../api";
+import {
+  apiGetMe,
+  apiDoctorListAppointments,
+  apiDoctorUpdateAppointment,
+} from "../api";
 
 // INIT: State
 const me = ref(null);
 const appointments = ref([]);
 const selected = ref(null);
-const message = ref("");
+const diagnosis = ref("");
+const prescription = ref("");
+const status = ref("Completed");
 const error = ref("");
-
-const treatmentForm = ref({
-  diagnosis: "",
-  prescription: "",
-  notes: "",
-});
+const message = ref("");
 
 // PROCESS: Load profile + appointments
-async function load() {
+async function loadAppointments() {
+  error.value = "";
   try {
     const resUser = await apiGetMe();
     me.value = resUser.data;
@@ -29,34 +31,42 @@ async function load() {
   }
 }
 
-// PROCESS: Select appointment row
+// PROCESS: Select an appointment row
 function selectAppointment(appt) {
   selected.value = appt;
-  message.value = "";
+  diagnosis.value = appt.diagnosis || "";
+  prescription.value = appt.prescription || "";
+  status.value = appt.status || "Completed";
   error.value = "";
-  treatmentForm.value = {
-    diagnosis: "",
-    prescription: "",
-    notes: "",
-  };
+  message.value = "";
 }
 
 // PROCESS: Save treatment for selected appointment
 async function saveTreatment() {
   if (!selected.value) return;
 
-  message.value = "";
   error.value = "";
+  message.value = "";
 
   try {
-    await apiDoctorUpdateAppointment(selected.value.id, treatmentForm.value);
+    await apiDoctorUpdateAppointment(selected.value.id, {
+      diagnosis: diagnosis.value,
+      prescription: prescription.value,
+      status: status.value,
+    });
+
     message.value = "Treatment details saved";
+
+    // reload list so UI is updated
+    await loadAppointments();
   } catch (e) {
-    error.value = e.response?.data?.error || "Failed to save treatment";
+    error.value =
+      e.response?.data?.error || "Failed to save treatment details";
   }
 }
 
-onMounted(load);
+// INIT: On mount
+onMounted(loadAppointments);
 </script>
 
 <template>
@@ -69,10 +79,10 @@ onMounted(load);
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
 
     <div class="row">
-      <!--LEFT: Appointment list-->
+      <!-- LEFT: Appointment list -->
       <div class="col-md-7">
         <h5>My Appointments</h5>
-        <table class="table table-hover table-sm align-middle">
+        <table class="table table-hover align-middle">
           <thead>
             <tr>
               <th>Date</th>
@@ -82,65 +92,84 @@ onMounted(load);
             </tr>
           </thead>
           <tbody>
-            <tr
-              v-for="a in appointments"
-              :key="a.id"
-              :class="{ 'table-active': selected && selected.id === a.id }"
-              style="cursor: pointer"
-              @click="selectAppointment(a)"
-            >
-              <td>{{ a.date }}</td>
-              <td>{{ a.time }}</td>
-              <td>{{ a.patient_name || '-' }}</td>
-              <td>{{ a.status }}</td>
-            </tr>
             <tr v-if="appointments.length === 0">
-              <td colspan="4" class="text-muted">No appointments yet.</td>
+              <td colspan="4" class="text-muted text-center">
+                No appointments yet.
+              </td>
+            </tr>
+            <tr
+              v-for="appt in appointments"
+              :key="appt.id"
+              :class="{ 'table-active': selected && selected.id === appt.id }"
+              @click="selectAppointment(appt)"
+              style="cursor: pointer"
+            >
+              <td>{{ appt.date }}</td>
+              <td>{{ appt.time }}</td>
+              <td>{{ appt.patient_name || appt.patient_username }}</td>
+              <td>
+                <span
+                  class="badge"
+                  :class="{
+                    'bg-secondary': appt.status === 'Booked',
+                    'bg-success': appt.status === 'Completed',
+                    'bg-danger': appt.status === 'Cancelled'
+                  }"
+                >
+                  {{ appt.status }}
+                </span>
+              </td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <!--RIGHT: Treatment form-->
+      <!-- RIGHT: Treatment form -->
       <div class="col-md-5">
         <h5>Treatment Details</h5>
-        <p v-if="!selected" class="text-muted">
+
+        <div v-if="!selected" class="text-muted">
           Select an appointment from the table to add diagnosis and prescription.
-        </p>
+        </div>
 
         <div v-else>
           <p>
-            <strong>Patient:</strong> {{ selected.patient_name || '-' }}<br />
-            <strong>Date:</strong> {{ selected.date }} {{ selected.time }}
+            <strong>Patient:</strong>
+            {{ selected.patient_name || selected.patient_username }}<br />
+            <strong>Time:</strong> {{ selected.date }} {{ selected.time }}
           </p>
 
           <form @submit.prevent="saveTreatment">
-            <div class="mb-2">
+            <div class="mb-3">
               <label class="form-label">Diagnosis</label>
               <textarea
-                v-model="treatmentForm.diagnosis"
+                v-model="diagnosis"
                 class="form-control"
                 rows="2"
-              ></textarea>
-            </div>
-            <div class="mb-2">
-              <label class="form-label">Prescription</label>
-              <textarea
-                v-model="treatmentForm.prescription"
-                class="form-control"
-                rows="2"
-              ></textarea>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Notes</label>
-              <textarea
-                v-model="treatmentForm.notes"
-                class="form-control"
-                rows="2"
+                required
               ></textarea>
             </div>
 
-            <button class="btn btn-primary" :disabled="!treatmentForm.diagnosis && !treatmentForm.prescription">
+            <div class="mb-3">
+              <label class="form-label">Prescription</label>
+              <textarea
+                v-model="prescription"
+                class="form-control"
+                rows="2"
+                required
+              ></textarea>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Status</label>
+              <select v-model="status" class="form-select">
+                <option value="Booked">Booked</option>
+                <option value="Completed">Completed</option>
+                <option value="Cancelled">Cancelled</option>
+              </select>
+            </div>
+
+            <button class="btn btn-primary">
               Save Treatment
             </button>
           </form>

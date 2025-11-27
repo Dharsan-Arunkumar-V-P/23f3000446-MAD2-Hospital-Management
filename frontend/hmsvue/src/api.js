@@ -56,3 +56,8 @@ export function apiPatientListAppointments() {
   return api.get("/api/patient/appointments");
 }
 
+export function apiPatientUpdateAppointment(id, payload) {
+  return api.put(`/api/patient/appointments/${id}`, payload);
+}
+
+
