@@ -415,6 +415,74 @@ def update_patient_appointment(aid):
         }
     )
 
+# ROUTE: Admin → List patients
+@app.get("/api/admin/patients")
+@require_auth
+@admin_required
+def admin_list_patients():
+    patients = User.query.filter_by(role=ROLE_PATIENT).all()
+    data = []
+    for p in patients:
+        data.append(
+            {
+                "id": p.id,
+                "username": p.username,
+                "name": p.name,
+                "email": p.email,
+            }
+        )
+    return jsonify(data)
+
+# ROUTE: Admin → Summary counts
+@app.get("/api/admin/summary")
+@require_auth
+@admin_required
+def admin_summary():
+    total_doctors = User.query.filter_by(role=ROLE_DOCTOR).count()
+    total_patients = User.query.filter_by(role=ROLE_PATIENT).count()
+    total_appointments = Appointment.query.count()
+
+    booked = Appointment.query.filter_by(status="Booked").count()
+    completed = Appointment.query.filter_by(status="Completed").count()
+    cancelled = Appointment.query.filter_by(status="Cancelled").count()
+
+    return jsonify(
+        {
+            "total_doctors": total_doctors,
+            "total_patients": total_patients,
+            "total_appointments": total_appointments,
+            "booked": booked,
+            "completed": completed,
+            "cancelled": cancelled,
+        }
+    )
+
+# ROUTE: Admin → List all appointments
+@app.get("/api/admin/appointments")
+@require_auth
+@admin_required
+def admin_list_appointments():
+    appts = Appointment.query.order_by(Appointment.date, Appointment.time).all()
+    data = []
+    for a in appts:
+        doctor = User.query.get(a.doctor_id)
+        patient = User.query.get(a.patient_id)
+        data.append(
+            {
+                "id": a.id,
+                "date": a.date,
+                "time": a.time,
+                "status": a.status,
+                "doctor_name": doctor.name if doctor else "",
+                "doctor_username": doctor.username if doctor else "",
+                "patient_name": patient.name if patient else "",
+                "patient_username": patient.username if patient else "",
+                "diagnosis": a.diagnosis,
+                "prescription": a.prescription,
+            }
+        )
+    return jsonify(data)
+
 # MAIN
 if __name__ == "__main__":
     app.run(debug=True)

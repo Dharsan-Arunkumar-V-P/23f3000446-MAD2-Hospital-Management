@@ -32,6 +32,18 @@ export function apiAdminListDoctors() {
   return api.get("/api/admin/doctors");
 }
 
+export function apiAdminSummary() {
+  return api.get("/api/admin/summary");
+}
+
+export function apiAdminListPatients() {
+  return api.get("/api/admin/patients");
+}
+
+export function apiAdminListAppointments() {
+  return api.get("/api/admin/appointments");
+}
+
 export function apiListDoctors() {
   return api.get("/api/doctors");
 }

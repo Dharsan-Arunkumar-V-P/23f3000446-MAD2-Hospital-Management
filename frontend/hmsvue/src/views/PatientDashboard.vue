@@ -2,26 +2,42 @@
 import { ref, onMounted } from "vue";
 import {
   apiGetMe,
-  apiDoctorListAppointments,
-  apiDoctorUpdateAppointment,
+  apiAdminSummary,
+  apiAdminListDoctors,
+  apiAdminListPatients,
+  apiAdminListAppointments,
+  apiAdminAddDoctor,
 } from "../api";
 
 const me = ref(null);
+
+const summary = ref({
+  total_doctors: 0,
+  total_patients: 0,
+  total_appointments: 0,
+  booked: 0,
+  completed: 0,
+  cancelled: 0,
+});
+
+const doctors = ref([]);
+const patients = ref([]);
 const appointments = ref([]);
-const selected = ref(null);
 
 const message = ref("");
 const error = ref("");
 const loading = ref(false);
 
-// form for diagnosis/prescription/status editing
-const form = ref({
-  diagnosis: "",
-  prescription: "",
-  status: "Completed",
+// add-doctor form
+const docForm = ref({
+  username: "",
+  name: "",
+  email: "",
+  specialization: "",
+  password: "",
 });
 
-// load doctor profile + appointments
+// LOAD: admin profile + summary + doctors + patients + appointments
 async function load() {
   error.value = "";
   message.value = "";
@@ -40,10 +56,40 @@ async function load() {
   }
 
   try {
-    const resAppts = await apiDoctorListAppointments();
+    const resSummary = await apiAdminSummary();
+    summary.value = resSummary.data;
+  } catch (e) {
+    console.error("Error loading /api/admin/summary", e);
+    error.value =
+      e.response?.data?.error ||
+      `Failed to load summary (${e.response?.status || "no status"})`;
+  }
+
+  try {
+    const resDoctors = await apiAdminListDoctors();
+    doctors.value = resDoctors.data;
+  } catch (e) {
+    console.error("Error loading /api/admin/doctors", e);
+    error.value =
+      e.response?.data?.error ||
+      `Failed to load doctors (${e.response?.status || "no status"})`;
+  }
+
+  try {
+    const resPatients = await apiAdminListPatients();
+    patients.value = resPatients.data;
+  } catch (e) {
+    console.error("Error loading /api/admin/patients", e);
+    error.value =
+      e.response?.data?.error ||
+      `Failed to load patients (${e.response?.status || "no status"})`;
+  }
+
+  try {
+    const resAppts = await apiAdminListAppointments();
     appointments.value = resAppts.data;
   } catch (e) {
-    console.error("Error loading /api/doctor/appointments", e);
+    console.error("Error loading /api/admin/appointments", e);
     error.value =
       e.response?.data?.error ||
       `Failed to load appointments (${e.response?.status || "no status"})`;
@@ -52,64 +98,32 @@ async function load() {
   }
 }
 
-// when clicking "Update" on a row
-function selectAppointment(appt) {
-  selected.value = appt;
-  form.value = {
-    diagnosis: appt.diagnosis || "",
-    prescription: appt.prescription || "",
-    status: appt.status || "Completed",
-  };
-  message.value = "";
-  error.value = "";
-}
-
-// clear selection
-function clearSelection() {
-  selected.value = null;
-  form.value = {
-    diagnosis: "",
-    prescription: "",
-    status: "Completed",
-  };
-}
-
-// save changes
-async function save() {
-  if (!selected.value) return;
-
+// ADD DOCTOR
+async function addDoctor() {
   error.value = "";
   message.value = "";
-  const id = selected.value.id;
+
+  if (!docForm.value.username || !docForm.value.password) {
+    error.value = "Username and password are required.";
+    return;
+  }
 
   try {
-    await apiDoctorUpdateAppointment(id, {
-      diagnosis: form.value.diagnosis,
-      prescription: form.value.prescription,
-      status: form.value.status,
-    });
+    const res = await apiAdminAddDoctor(docForm.value);
+    doctors.value.push(res.data);
+    message.value = "Doctor added successfully.";
 
-    message.value = "Appointment updated";
-
-    // reload appointments
-    const resAppts = await apiDoctorListAppointments();
-    appointments.value = resAppts.data;
-
-    // keep selection in sync with new data
-    const updated = appointments.value.find((a) => a.id === id);
-    if (updated) {
-      selected.value = updated;
-    } else {
-      clearSelection();
-    }
+    docForm.value = {
+      username: "",
+      name: "",
+      email: "",
+      specialization: "",
+      password: "",
+    };
   } catch (e) {
-    console.error("Error updating appointment", e);
-    const backendMsg = e.response?.data?.error || "";
-    if (backendMsg) {
-      error.value = backendMsg;
-    } else {
-      error.value = "Failed to update appointment. Please try again.";
-    }
+    console.error("Error adding doctor", e);
+    error.value =
+      e.response?.data?.error || "Failed to add doctor. Please try again.";
   }
 }
 
@@ -118,142 +132,200 @@ onMounted(load);
 
 <template>
   <div>
-    <h3 class="mb-3">Doctor Dashboard</h3>
+    <h3 class="mb-3">Admin Dashboard</h3>
 
-    <p v-if="me">Welcome, Dr. {{ me.name }}</p>
+    <p v-if="me">Welcome, {{ me.name }} (Admin)</p>
 
     <div v-if="message" class="alert alert-success">{{ message }}</div>
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
 
-    <div v-if="loading" class="alert alert-info py-2">
-      Loading your appointments...
+    <div
+      v-if="loading"
+      class="alert alert-info py-2"
+    >
+      Loading data...
+    </div>
+
+    <!-- SUMMARY CARDS -->
+    <div class="row mb-4">
+      <div class="col-md-3 mb-2">
+        <div class="card text-center">
+          <div class="card-body">
+            <div class="fw-bold">Doctors</div>
+            <div class="fs-4">{{ summary.total_doctors }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3 mb-2">
+        <div class="card text-center">
+          <div class="card-body">
+            <div class="fw-bold">Patients</div>
+            <div class="fs-4">{{ summary.total_patients }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3 mb-2">
+        <div class="card text-center">
+          <div class="card-body">
+            <div class="fw-bold">Appointments</div>
+            <div class="fs-4">{{ summary.total_appointments }}</div>
+            <small class="text-muted">
+              Booked: {{ summary.booked }},
+              Completed: {{ summary.completed }},
+              Cancelled: {{ summary.cancelled }}
+            </small>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="row">
-      <!-- LEFT: list of appointments -->
+      <!-- LEFT: Doctors + Add Doctor -->
+      <div class="col-md-5">
+        <h5>Doctors</h5>
+        <table class="table table-striped table-sm align-middle">
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Specialization</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="doctors.length === 0">
+              <td colspan="4" class="text-muted text-center">
+                No doctors added yet.
+              </td>
+            </tr>
+            <tr
+              v-for="d in doctors"
+              :key="d.id"
+            >
+              <td>{{ d.username }}</td>
+              <td>{{ d.name }}</td>
+              <td>{{ d.email }}</td>
+              <td>{{ d.specialization || "-" }}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h6 class="mt-3">Add Doctor</h6>
+        <form @submit.prevent="addDoctor">
+          <div class="mb-2">
+            <label class="form-label">Username</label>
+            <input
+              v-model="docForm.username"
+              type="text"
+              class="form-control"
+              required
+            />
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Name</label>
+            <input
+              v-model="docForm.name"
+              type="text"
+              class="form-control"
+            />
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Email</label>
+            <input
+              v-model="docForm.email"
+              type="email"
+              class="form-control"
+            />
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Specialization</label>
+            <input
+              v-model="docForm.specialization"
+              type="text"
+              class="form-control"
+            />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Password</label>
+            <input
+              v-model="docForm.password"
+              type="password"
+              class="form-control"
+              required
+            />
+          </div>
+          <button class="btn btn-primary btn-sm">Add Doctor</button>
+        </form>
+      </div>
+
+      <!-- RIGHT: Patients + Appointments -->
       <div class="col-md-7">
-        <h5>My Appointments</h5>
-        <table class="table table-striped align-middle">
+        <h5>Patients</h5>
+        <table class="table table-striped table-sm align-middle">
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Name</th>
+              <th>Email</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="patients.length === 0">
+              <td colspan="3" class="text-muted text-center">
+                No patients registered yet.
+              </td>
+            </tr>
+            <tr
+              v-for="p in patients"
+              :key="p.id"
+            >
+              <td>{{ p.username }}</td>
+              <td>{{ p.name }}</td>
+              <td>{{ p.email }}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h5 class="mt-4">All Appointments</h5>
+        <table class="table table-striped table-sm align-middle">
           <thead>
             <tr>
               <th>Date</th>
               <th>Time</th>
+              <th>Doctor</th>
               <th>Patient</th>
               <th>Status</th>
-              <th style="width: 120px">Action</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="appointments.length === 0">
               <td colspan="5" class="text-muted text-center">
-                No appointments assigned.
+                No appointments yet.
               </td>
             </tr>
             <tr
-              v-for="appt in appointments"
-              :key="appt.id"
+              v-for="a in appointments"
+              :key="a.id"
             >
-              <td>{{ appt.date }}</td>
-              <td>{{ appt.time }}</td>
-              <td>{{ appt.patient_name || appt.patient_username }}</td>
+              <td>{{ a.date }}</td>
+              <td>{{ a.time }}</td>
+              <td>{{ a.doctor_name || a.doctor_username }}</td>
+              <td>{{ a.patient_name || a.patient_username }}</td>
               <td>
                 <span
                   class="badge"
                   :class="{
-                    'bg-secondary': appt.status === 'Booked',
-                    'bg-success': appt.status === 'Completed',
-                    'bg-danger': appt.status === 'Cancelled'
+                    'bg-secondary': a.status === 'Booked',
+                    'bg-success': a.status === 'Completed',
+                    'bg-danger': a.status === 'Cancelled'
                   }"
                 >
-                  {{ appt.status }}
+                  {{ a.status }}
                 </span>
-              </td>
-              <td>
-                <button
-                  class="btn btn-sm btn-outline-primary"
-                  @click="selectAppointment(appt)"
-                >
-                  Update
-                </button>
               </td>
             </tr>
           </tbody>
         </table>
-      </div>
-
-      <!-- RIGHT: selected appointment details / form -->
-      <div class="col-md-5">
-        <h5>Appointment Details</h5>
-
-        <div v-if="!selected" class="text-muted">
-          Select an appointment to view and update diagnosis / prescription.
-        </div>
-
-        <div v-else class="card">
-          <div class="card-body">
-            <p class="mb-1">
-              <strong>Patient:</strong>
-              {{ selected.patient_name || selected.patient_username }}
-            </p>
-            <p class="mb-1">
-              <strong>Date:</strong> {{ selected.date }}
-            </p>
-            <p class="mb-1">
-              <strong>Time:</strong> {{ selected.time }}
-            </p>
-
-            <hr />
-
-            <div class="mb-2">
-              <label class="form-label">Status</label>
-              <select
-                v-model="form.status"
-                class="form-select"
-              >
-                <option value="Booked">Booked</option>
-                <option value="Completed">Completed</option>
-                <option value="Cancelled">Cancelled</option>
-              </select>
-            </div>
-
-            <div class="mb-2">
-              <label class="form-label">Diagnosis</label>
-              <textarea
-                v-model="form.diagnosis"
-                class="form-control"
-                rows="2"
-                placeholder="Enter diagnosis notes"
-              ></textarea>
-            </div>
-
-            <div class="mb-3">
-              <label class="form-label">Prescription</label>
-              <textarea
-                v-model="form.prescription"
-                class="form-control"
-                rows="2"
-                placeholder="Enter prescription details"
-              ></textarea>
-            </div>
-
-            <div class="d-flex justify-content-between">
-              <button
-                type="button"
-                class="btn btn-secondary"
-                @click="clearSelection"
-              >
-                Clear
-              </button>
-              <button
-                type="button"
-                class="btn btn-primary"
-                @click="save"
-              >
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   </div>
