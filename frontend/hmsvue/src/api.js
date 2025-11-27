@@ -28,6 +28,7 @@ export function apiGetMe() {
   return api.get("/api/me");
 }
 
+//INIT: Admin Controls
 export function apiAdminListDoctors() {
   return api.get("/api/admin/doctors");
 }
@@ -64,16 +65,19 @@ export function apiAdminTaskStatus(taskId) {
   return api.get(`/api/admin/tasks/${taskId}`);
 }
 
-export function apiPatientBookAppointment(payload) {
-  return api.post("/api/patient/appointments", payload);
-}
-
+//INIT: Doc & Appt
 export function apiDoctorUpdateAppointment(id, payload) {
   return api.put(`/api/doctor/appointments/${id}`, payload);
 }
 
 export function apiDoctorListAppointments() {
   return api.get("/api/doctor/appointments");
+}
+
+
+//INIT: Pat & Appt
+export function apiPatientBookAppointment(payload) {
+  return api.post("/api/patient/appointments", payload);
 }
 
 export function apiPatientListAppointments() {
@@ -84,5 +88,13 @@ export function apiPatientUpdateAppointment(id, payload) {
   return api.put(`/api/patient/appointments/${id}`, payload);
 }
 
+//INIT: Simluation
+export function apiAdminRunSimulationTask() {
+  return api.get("/api/admin/run-simulation-task");
+}
+
+export function apiAdminSimulationStatus() {
+  return api.get("/api/admin/simulation-task-status");
+}
 
 

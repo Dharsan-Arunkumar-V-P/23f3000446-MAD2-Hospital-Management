@@ -9,26 +9,17 @@ from authutils import create_token, require_auth, admin_required, doctor_require
 import bcrypt
 from sqlalchemy.exc import IntegrityError  
 
-# SETUP: Imports (For Celery)
-from celeryapp import make_celery
-from datetime import date
-import csv
-import os
-import uuid
-from celery.result import AsyncResult
+# SETUP: Imports (Background Task Simulation)
+import threading
+import time
 
 # INIT: Flask app
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///../instance/hms.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-# INIT: Celery / Redis configuration
-app.config["CELERY_BROKER_URL"] = "redis://localhost:6379/0"
-app.config["CELERY_RESULT_BACKEND"] = "redis://localhost:6379/0"
-
 db.init_app(app)
 CORS(app)
-celery = make_celery(app)
 
 # INIT: Create tables and default admin user
 with app.app_context():
@@ -377,16 +368,6 @@ def admin_trigger_reminders():
     task = send_today_appointment_reminders.delay()
     return jsonify({"task_id": task.id}), 202
 
-
-# ROUTE: Admin → export appointments CSV
-@app.post("/api/admin/tasks/export-appointments")
-@require_auth
-@admin_required
-def admin_trigger_export():
-    task = export_appointments_csv.delay()
-    return jsonify({"task_id": task.id}), 202
-
-
 # ROUTE: Admin → check task status
 @app.get("/api/admin/tasks/<task_id>")
 @require_auth
@@ -526,49 +507,38 @@ def admin_list_appointments():
         )
     return jsonify(data)
 
-#ROUTE: CELERY MANAGER
-@celery.task
-def send_today_appointment_reminders():
-    """Background job: logs reminders for today’s booked appointments."""
-    today = date.today().isoformat()
-    appts = Appointment.query.filter_by(date=today, status="Booked").all()
-    
-    count = 0
-    for a in appts:
-        count += 1
-        print(f"[REMINDER] {today} {a.time} — patient={a.patient_id}, doctor={a.doctor_id}")
+# INIT: Background Task Simulation
 
-    return {"date": today, "reminders_sent": count}
+def simulate_report_generation():
+    import time
+    time.sleep(3)
+    print("Simulating heavy background processing...")
+    with open("simulated_report.txt", "w") as f:
+        f.write("Simulation complete.")
+
+#ROUTE: Background Task Simulation
+@app.get("/api/admin/run-simulation-task")
+@require_auth
+@admin_required
+def run_simulation_task():
+    thread = threading.Thread(target=simulate_report_generation)
+    thread.start()
+
+    return jsonify({
+        "message": "Simulation started",
+        "details": "A background simulation task is now running."
+    })
 
 
-@celery.task
-def export_appointments_csv():
-    """Exports all appointments to a CSV file asynchronously."""
-    export_dir = os.path.join(os.path.dirname(__file__), "exports")
-    os.makedirs(export_dir, exist_ok=True)
+@app.get("/api/admin/simulation-task-status")
+@require_auth
+@admin_required
+def simulation_task_status():
+    return jsonify({
+        "status": "Simulation active",
+        "note": "This background operation is a simulated task for demonstration."
+    })
 
-    filename = f"appointments_{uuid.uuid4().hex}.csv"
-    full_path = os.path.join(export_dir, filename)
-
-    appts = Appointment.query.order_by(Appointment.date, Appointment.time).all()
-
-    with open(full_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow([
-            "id", "date", "time", "status",
-            "doctor_id", "patient_id",
-            "diagnosis", "prescription",
-        ])
-
-        for a in appts:
-            writer.writerow([
-                a.id, a.date, a.time, a.status,
-                a.doctor_id, a.patient_id,
-                a.diagnosis or "", a.prescription or ""
-            ])
-
-    print(f"[EXPORT] CSV saved → {full_path}")
-    return {"file": full_path}
 
 # MAIN
 if __name__ == "__main__":
