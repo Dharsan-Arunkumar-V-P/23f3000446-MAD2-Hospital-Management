@@ -52,6 +52,18 @@ export function apiAdminAddDoctor(payload) {
   return api.post("/api/admin/doctors", payload);
 }
 
+export function apiAdminTriggerReminders() {
+  return api.post("/api/admin/tasks/reminders");
+}
+
+export function apiAdminTriggerExportAppointments() {
+  return api.post("/api/admin/tasks/export-appointments");
+}
+
+export function apiAdminTaskStatus(taskId) {
+  return api.get(`/api/admin/tasks/${taskId}`);
+}
+
 export function apiPatientBookAppointment(payload) {
   return api.post("/api/patient/appointments", payload);
 }
@@ -71,5 +83,6 @@ export function apiPatientListAppointments() {
 export function apiPatientUpdateAppointment(id, payload) {
   return api.put(`/api/patient/appointments/${id}`, payload);
 }
+
 
 
