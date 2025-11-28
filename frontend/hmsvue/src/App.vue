@@ -40,6 +40,10 @@ function logout() {
   <div>
     <nav class="navbar navbar-expand navbar-dark bg-dark px-3">
       <span class="navbar-brand fw-bold">HMS</span>
+      <a class="navbar-brand" href="#">
+      <img src="/icon-192.png" alt="Medaleon" style="height:28px; margin-right:8px" />
+      Medaleon
+      </a>
 
       <div class="navbar-nav me-auto">
         <button
@@ -98,4 +102,5 @@ body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
 }
+
 </style>

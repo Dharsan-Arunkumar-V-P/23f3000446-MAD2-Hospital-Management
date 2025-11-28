@@ -5,9 +5,9 @@ from functools import wraps
 from datetime import datetime, timedelta
 from dba import User, ROLE_ADMIN, ROLE_DOCTOR, ROLE_PATIENT
 from dba import db
+import os
 
-SECRET_KEY = "CHANGE_THIS_SECRET_KEY"
-
+SECRET_KEY = os.environ.get("SECRET_KEY", "my-fallback-secret-key")
 
 # FUNCTION: Create JWT
 def create_token(user):

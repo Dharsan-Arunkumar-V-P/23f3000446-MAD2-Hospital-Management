@@ -21,6 +21,10 @@ const routes = [
   { path: "/login", name: "login", component: LoginView },
   { path: "/register", name: "register", component: RegisterView },
   {
+    path: "/",
+    redirect: "/login",
+  },
+  {
     path: "/admin",
     name: "admin",
     component: AdminDashboard,
@@ -39,8 +43,8 @@ const routes = [
     meta: { requiresAuth: true, role: "patient" },
   },
   {
-  path: "/:pathMatch(.*)*",
-  component: { template: "<h1>404</h1>" }  
+    path: "/:pathMatch(.*)*",
+    component: { template: "<h1>404</h1>" }  
   },
 ];
 
