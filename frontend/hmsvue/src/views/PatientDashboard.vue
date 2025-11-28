@@ -1,129 +1,192 @@
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import {
   apiGetMe,
-  apiAdminSummary,
-  apiAdminListDoctors,
-  apiAdminListPatients,
-  apiAdminListAppointments,
-  apiAdminAddDoctor,
+  apiListDoctors,
+  apiPatientBookAppointment,
+  apiPatientListAppointments,
+  apiPatientUpdateAppointment,
 } from "../api";
 
+// STATE
 const me = ref(null);
-
-const summary = ref({
-  total_doctors: 0,
-  total_patients: 0,
-  total_appointments: 0,
-  booked: 0,
-  completed: 0,
-  cancelled: 0,
-});
-
 const doctors = ref([]);
-const patients = ref([]);
 const appointments = ref([]);
-
 const message = ref("");
 const error = ref("");
-const loading = ref(false);
 
-// add-doctor form
-const docForm = ref({
-  username: "",
-  name: "",
-  email: "",
-  specialization: "",
-  password: "",
+const form = ref({
+  doctor_id: "",
+  date: "",
+  time: "",
 });
 
-// LOAD: admin profile + summary + doctors + patients + appointments
+const editingApptId = ref(null);
+
+// DERIVED: split upcoming vs past by status
+const upcomingAppointments = computed(() =>
+  appointments.value.filter((a) => a.status === "Booked")
+);
+
+const pastAppointments = computed(() =>
+  appointments.value.filter((a) => a.status !== "Booked")
+);
+
+// LOAD profile + doctors + appointments
 async function load() {
   error.value = "";
   message.value = "";
-  loading.value = true;
 
+  // 1) profile
   try {
-    const resUser = await apiGetMe();
-    me.value = resUser.data;
+    const resMe = await apiGetMe();
+    me.value = resMe.data;
   } catch (e) {
-    console.error("Error loading /api/me", e);
+    console.error("Error /api/me", e);
     error.value =
       e.response?.data?.error ||
       `Failed to load profile (${e.response?.status || "no status"})`;
-    loading.value = false;
     return;
   }
 
+  // 2) doctors
   try {
-    const resSummary = await apiAdminSummary();
-    summary.value = resSummary.data;
+    const resDocs = await apiListDoctors();
+    doctors.value = resDocs.data;
   } catch (e) {
-    console.error("Error loading /api/admin/summary", e);
-    error.value =
-      e.response?.data?.error ||
-      `Failed to load summary (${e.response?.status || "no status"})`;
+    console.error("Error /api/doctors", e);
+    // keep going, patient can still see existing appointments
   }
 
+  // 3) appointments
   try {
-    const resDoctors = await apiAdminListDoctors();
-    doctors.value = resDoctors.data;
-  } catch (e) {
-    console.error("Error loading /api/admin/doctors", e);
-    error.value =
-      e.response?.data?.error ||
-      `Failed to load doctors (${e.response?.status || "no status"})`;
-  }
-
-  try {
-    const resPatients = await apiAdminListPatients();
-    patients.value = resPatients.data;
-  } catch (e) {
-    console.error("Error loading /api/admin/patients", e);
-    error.value =
-      e.response?.data?.error ||
-      `Failed to load patients (${e.response?.status || "no status"})`;
-  }
-
-  try {
-    const resAppts = await apiAdminListAppointments();
+    const resAppts = await apiPatientListAppointments();
     appointments.value = resAppts.data;
   } catch (e) {
-    console.error("Error loading /api/admin/appointments", e);
-    error.value =
-      e.response?.data?.error ||
-      `Failed to load appointments (${e.response?.status || "no status"})`;
-  } finally {
-    loading.value = false;
+    console.error("Error /api/patient/appointments", e);
+    const backendMsg = e.response?.data?.error || "";
+    if (backendMsg) {
+      error.value = backendMsg;
+    } else {
+      appointments.value = [];
+    }
   }
 }
 
-// ADD DOCTOR
-async function addDoctor() {
+function resetForm() {
+  form.value = {
+    doctor_id: "",
+    date: "",
+    time: "",
+  };
+  editingApptId.value = null;
+}
+
+// BOOK or UPDATE appointment
+async function submitForm() {
   error.value = "";
   message.value = "";
 
-  if (!docForm.value.username || !docForm.value.password) {
-    error.value = "Username and password are required.";
+  // If editing: reschedule existing appointment
+  if (editingApptId.value) {
+    try {
+      await apiPatientUpdateAppointment(editingApptId.value, {
+        date: form.value.date,
+        time: form.value.time,
+        status: "Booked",
+      });
+
+      message.value = "Appointment updated successfully";
+
+      const resAppts = await apiPatientListAppointments();
+      appointments.value = resAppts.data;
+
+      resetForm();
+    } catch (e) {
+      console.error("Error updating appointment", e);
+      const backendMsg = e.response?.data?.error || "";
+
+      if (backendMsg.includes("already booked")) {
+        error.value =
+          "That time slot is already booked. Please choose a different time or doctor.";
+      } else {
+        error.value =
+          backendMsg ||
+          "Could not update the appointment. Please try again.";
+      }
+    }
     return;
   }
 
+  // If not editing: create new appointment
   try {
-    const res = await apiAdminAddDoctor(docForm.value);
-    doctors.value.push(res.data);
-    message.value = "Doctor added successfully.";
+    await apiPatientBookAppointment(form.value);
+    message.value = "Appointment booked";
 
-    docForm.value = {
-      username: "",
-      name: "",
-      email: "",
-      specialization: "",
-      password: "",
-    };
+    const resAppts = await apiPatientListAppointments();
+    appointments.value = resAppts.data;
+
+    resetForm();
   } catch (e) {
-    console.error("Error adding doctor", e);
+    console.error("Error booking appointment", e);
+    const backendMsg = e.response?.data?.error || "";
+
+    if (backendMsg.includes("already booked")) {
+      error.value =
+        "That time slot is already booked. Please choose a different time or doctor.";
+    } else if (backendMsg.includes("Doctor, date and time are required")) {
+      error.value = "Please select doctor, date and time before booking.";
+    } else {
+      error.value =
+        backendMsg ||
+        "Could not book the appointment. Please check and try again.";
+    }
+  }
+}
+
+// START reschedule for an appointment
+function startReschedule(appt) {
+  editingApptId.value = appt.id;
+  form.value = {
+    doctor_id: appt.doctor_id || "", // doctor stays same
+    date: appt.date,
+    time: appt.time,
+  };
+  message.value = "";
+  error.value = "";
+}
+
+// CANCEL editing/reschedule
+function cancelEditing() {
+  resetForm();
+}
+
+// CANCEL an appointment (status → Cancelled)
+async function cancelAppointment(appt) {
+  const ok = window.confirm(
+    "Are you sure you want to cancel this appointment?"
+  );
+  if (!ok) return;
+
+  error.value = "";
+  message.value = "";
+
+  try {
+    await apiPatientUpdateAppointment(appt.id, { status: "Cancelled" });
+
+    message.value = "Appointment cancelled";
+
+    const resAppts = await apiPatientListAppointments();
+    appointments.value = resAppts.data;
+
+    if (editingApptId.value === appt.id) {
+      resetForm();
+    }
+  } catch (e) {
+    console.error("Error cancelling appointment", e);
+    const backendMsg = e.response?.data?.error || "";
     error.value =
-      e.response?.data?.error || "Failed to add doctor. Please try again.";
+      backendMsg || "Could not cancel the appointment. Please try again.";
   }
 }
 
@@ -132,197 +195,166 @@ onMounted(load);
 
 <template>
   <div>
-    <h3 class="mb-3">Admin Dashboard</h3>
+    <h3 class="mb-3">Patient Dashboard</h3>
 
-    <p v-if="me">Welcome, {{ me.name }} (Admin)</p>
+    <p v-if="me">Welcome, {{ me.name }}</p>
 
     <div v-if="message" class="alert alert-success">{{ message }}</div>
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
 
-    <div
-      v-if="loading"
-      class="alert alert-info py-2"
-    >
-      Loading data...
-    </div>
-
-    <!-- SUMMARY CARDS -->
-    <div class="row mb-4">
-      <div class="col-md-3 mb-2">
-        <div class="card text-center">
-          <div class="card-body">
-            <div class="fw-bold">Doctors</div>
-            <div class="fs-4">{{ summary.total_doctors }}</div>
-          </div>
-        </div>
-      </div>
-      <div class="col-md-3 mb-2">
-        <div class="card text-center">
-          <div class="card-body">
-            <div class="fw-bold">Patients</div>
-            <div class="fs-4">{{ summary.total_patients }}</div>
-          </div>
-        </div>
-      </div>
-      <div class="col-md-3 mb-2">
-        <div class="card text-center">
-          <div class="card-body">
-            <div class="fw-bold">Appointments</div>
-            <div class="fs-4">{{ summary.total_appointments }}</div>
-            <small class="text-muted">
-              Booked: {{ summary.booked }},
-              Completed: {{ summary.completed }},
-              Cancelled: {{ summary.cancelled }}
-            </small>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <div class="row">
-      <!-- LEFT: Doctors + Add Doctor -->
+      <!-- LEFT: Book / Reschedule -->
       <div class="col-md-5">
-        <h5>Doctors</h5>
-        <table class="table table-striped table-sm align-middle">
-          <thead>
-            <tr>
-              <th>Username</th>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Specialization</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="doctors.length === 0">
-              <td colspan="4" class="text-muted text-center">
-                No doctors added yet.
-              </td>
-            </tr>
-            <tr
-              v-for="d in doctors"
-              :key="d.id"
-            >
-              <td>{{ d.username }}</td>
-              <td>{{ d.name }}</td>
-              <td>{{ d.email }}</td>
-              <td>{{ d.specialization || "-" }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <h5>Book Appointment</h5>
 
-        <h6 class="mt-3">Add Doctor</h6>
-        <form @submit.prevent="addDoctor">
+        <div
+          v-if="editingApptId"
+          class="alert alert-info py-2 px-3 mb-2"
+        >
+          You are rescheduling an existing appointment.
+          <button
+            type="button"
+            class="btn btn-sm btn-link"
+            @click="cancelEditing"
+          >
+            Cancel
+          </button>
+        </div>
+
+        <form @submit.prevent="submitForm">
           <div class="mb-2">
-            <label class="form-label">Username</label>
+            <label class="form-label">Doctor</label>
+            <select
+              v-model="form.doctor_id"
+              class="form-select"
+              :disabled="!!editingApptId"
+              required
+            >
+              <option value="" disabled>Select doctor</option>
+              <option
+                v-for="d in doctors"
+                :key="d.id"
+                :value="d.id"
+              >
+                {{ d.name }} ({{ d.specialization || "General" }})
+              </option>
+            </select>
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label">Date</label>
             <input
-              v-model="docForm.username"
-              type="text"
+              v-model="form.date"
+              type="date"
               class="form-control"
               required
             />
           </div>
-          <div class="mb-2">
-            <label class="form-label">Name</label>
-            <input
-              v-model="docForm.name"
-              type="text"
-              class="form-control"
-            />
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Email</label>
-            <input
-              v-model="docForm.email"
-              type="email"
-              class="form-control"
-            />
-          </div>
-          <div class="mb-2">
-            <label class="form-label">Specialization</label>
-            <input
-              v-model="docForm.specialization"
-              type="text"
-              class="form-control"
-            />
-          </div>
+
           <div class="mb-3">
-            <label class="form-label">Password</label>
+            <label class="form-label">Time</label>
             <input
-              v-model="docForm.password"
-              type="password"
+              v-model="form.time"
+              type="time"
               class="form-control"
               required
             />
           </div>
-          <button class="btn btn-primary btn-sm">Add Doctor</button>
+
+          <button class="btn btn-primary">
+            {{ editingApptId ? "Save Changes" : "Book" }}
+          </button>
         </form>
       </div>
 
-      <!-- RIGHT: Patients + Appointments -->
+      <!-- RIGHT: Upcoming + Past -->
       <div class="col-md-7">
-        <h5>Patients</h5>
-        <table class="table table-striped table-sm align-middle">
-          <thead>
-            <tr>
-              <th>Username</th>
-              <th>Name</th>
-              <th>Email</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="patients.length === 0">
-              <td colspan="3" class="text-muted text-center">
-                No patients registered yet.
-              </td>
-            </tr>
-            <tr
-              v-for="p in patients"
-              :key="p.id"
-            >
-              <td>{{ p.username }}</td>
-              <td>{{ p.name }}</td>
-              <td>{{ p.email }}</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <h5 class="mt-4">All Appointments</h5>
-        <table class="table table-striped table-sm align-middle">
+        <h5>Upcoming Appointments</h5>
+        <table class="table table-striped align-middle">
           <thead>
             <tr>
               <th>Date</th>
               <th>Time</th>
               <th>Doctor</th>
-              <th>Patient</th>
               <th>Status</th>
+              <th style="width: 190px;">Actions</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-if="appointments.length === 0">
+            <tr v-if="upcomingAppointments.length === 0">
               <td colspan="5" class="text-muted text-center">
-                No appointments yet.
+                No upcoming appointments.
               </td>
             </tr>
             <tr
-              v-for="a in appointments"
-              :key="a.id"
+              v-for="appt in upcomingAppointments"
+              :key="appt.id"
             >
-              <td>{{ a.date }}</td>
-              <td>{{ a.time }}</td>
-              <td>{{ a.doctor_name || a.doctor_username }}</td>
-              <td>{{ a.patient_name || a.patient_username }}</td>
+              <td>{{ appt.date }}</td>
+              <td>{{ appt.time }}</td>
+              <td>{{ appt.doctor_name || appt.doctor_username }}</td>
+              <td>
+                <span class="badge bg-secondary">
+                  {{ appt.status }}
+                </span>
+              </td>
+              <td>
+                <button
+                  class="btn btn-sm btn-outline-primary me-1"
+                  @click="startReschedule(appt)"
+                >
+                  Reschedule
+                </button>
+                <button
+                  class="btn btn-sm btn-outline-danger"
+                  @click="cancelAppointment(appt)"
+                >
+                  Cancel
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h5 class="mt-4">Past Appointments</h5>
+        <table class="table table-striped align-middle">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Time</th>
+              <th>Doctor</th>
+              <th>Status</th>
+              <th>Diagnosis</th>
+              <th>Prescription</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="pastAppointments.length === 0">
+              <td colspan="6" class="text-muted text-center">
+                No past appointments yet.
+              </td>
+            </tr>
+            <tr
+              v-for="appt in pastAppointments"
+              :key="appt.id"
+            >
+              <td>{{ appt.date }}</td>
+              <td>{{ appt.time }}</td>
+              <td>{{ appt.doctor_name || appt.doctor_username }}</td>
               <td>
                 <span
                   class="badge"
                   :class="{
-                    'bg-secondary': a.status === 'Booked',
-                    'bg-success': a.status === 'Completed',
-                    'bg-danger': a.status === 'Cancelled'
+                    'bg-success': appt.status === 'Completed',
+                    'bg-danger': appt.status === 'Cancelled',
+                    'bg-secondary': appt.status !== 'Completed' && appt.status !== 'Cancelled'
                   }"
                 >
-                  {{ a.status }}
+                  {{ appt.status }}
                 </span>
               </td>
+              <td>{{ appt.diagnosis || "-" }}</td>
+              <td>{{ appt.prescription || "-" }}</td>
             </tr>
           </tbody>
         </table>

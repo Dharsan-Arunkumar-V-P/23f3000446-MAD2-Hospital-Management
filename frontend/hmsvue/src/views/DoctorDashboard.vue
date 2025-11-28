@@ -1,179 +1,219 @@
 <script setup>
-// SETUP: Imports
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import {
   apiGetMe,
   apiDoctorListAppointments,
   apiDoctorUpdateAppointment,
 } from "../api";
 
-// INIT: State
 const me = ref(null);
 const appointments = ref([]);
-const selected = ref(null);
-const diagnosis = ref("");
-const prescription = ref("");
-const status = ref("Completed");
-const error = ref("");
+const loading = ref(false);
 const message = ref("");
+const error = ref("");
 
-// PROCESS: Load profile + appointments
-async function loadAppointments() {
+// filters
+const search = ref("");
+const statusFilter = ref("");
+
+// load doctor + appointments
+async function load() {
+  message.value = "";
   error.value = "";
-  try {
-    const resUser = await apiGetMe();
-    me.value = resUser.data;
+  loading.value = true;
 
+  try {
+    const resMe = await apiGetMe();
+    me.value = resMe.data;
+  } catch (e) {
+    console.error("Error loading /api/me", e);
+    error.value =
+      e.response?.data?.error ||
+      `Failed to load profile (${e.response?.status || "no status"})`;
+    loading.value = false;
+    return;
+  }
+
+  try {
     const resAppts = await apiDoctorListAppointments();
     appointments.value = resAppts.data;
   } catch (e) {
-    error.value = "Failed to load doctor data";
+    console.error("Error loading doctor appointments", e);
+    error.value =
+      e.response?.data?.error ||
+      `Failed to load appointments (${e.response?.status || "no status"})`;
+  } finally {
+    loading.value = false;
   }
 }
 
-// PROCESS: Select an appointment row
-function selectAppointment(appt) {
-  selected.value = appt;
-  diagnosis.value = appt.diagnosis || "";
-  prescription.value = appt.prescription || "";
-  status.value = appt.status || "Completed";
-  error.value = "";
-  message.value = "";
-}
+// computed: filtered appointments
+const filteredAppointments = computed(() => {
+  const term = search.value.trim().toLowerCase();
+  const status = statusFilter.value;
 
-// PROCESS: Save treatment for selected appointment
-async function saveTreatment() {
-  if (!selected.value) return;
+  return appointments.value.filter((a) => {
+    const matchesStatus = !status || a.status === status;
 
-  error.value = "";
+    const combined = `${a.date} ${a.time} ${a.patient_name || ""} ${
+      a.patient_username || ""
+    }`.toLowerCase();
+
+    const matchesSearch = !term || combined.includes(term);
+
+    return matchesStatus && matchesSearch;
+  });
+});
+
+// save appointment changes (diagnosis / prescription / status)
+async function saveAppointment(appt) {
   message.value = "";
+  error.value = "";
 
   try {
-    await apiDoctorUpdateAppointment(selected.value.id, {
-      diagnosis: diagnosis.value,
-      prescription: prescription.value,
-      status: status.value,
+    await apiDoctorUpdateAppointment(appt.id, {
+      diagnosis: appt.diagnosis || "",
+      prescription: appt.prescription || "",
+      status: appt.status || "Completed",
     });
 
-    message.value = "Treatment details saved";
-
-    // reload list so UI is updated
-    await loadAppointments();
+    message.value = "Appointment updated";
   } catch (e) {
+    console.error("Error updating appointment", e);
     error.value =
-      e.response?.data?.error || "Failed to save treatment details";
+      e.response?.data?.error ||
+      `Failed to update appointment (${e.response?.status || "no status"})`;
   }
 }
 
-// INIT: On mount
-onMounted(loadAppointments);
+onMounted(load);
 </script>
 
 <template>
   <div>
     <h3 class="mb-3">Doctor Dashboard</h3>
 
-    <p v-if="me">Welcome, Dr. {{ me.name }}</p>
+    <p v-if="me">Logged in as Dr. {{ me.name }} ({{ me.username }})</p>
 
     <div v-if="message" class="alert alert-success">{{ message }}</div>
     <div v-if="error" class="alert alert-danger">{{ error }}</div>
 
-    <div class="row">
-      <!-- LEFT: Appointment list -->
-      <div class="col-md-7">
-        <h5>My Appointments</h5>
-        <table class="table table-hover align-middle">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Time</th>
-              <th>Patient</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="appointments.length === 0">
-              <td colspan="4" class="text-muted text-center">
-                No appointments yet.
-              </td>
-            </tr>
-            <tr
-              v-for="appt in appointments"
-              :key="appt.id"
-              :class="{ 'table-active': selected && selected.id === appt.id }"
-              @click="selectAppointment(appt)"
-              style="cursor: pointer"
+    <!-- Filters -->
+    <div class="card mb-3 shadow-sm">
+      <div class="card-body">
+        <div class="row g-2 align-items-end">
+          <div class="col-md-6">
+            <label class="form-label small text-muted mb-1">
+              Search by patient, date, or time
+            </label>
+            <input
+              v-model="search"
+              class="form-control form-control-sm"
+              placeholder="e.g. pat1, John, 2025-11-28..."
+            />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small text-muted mb-1">
+              Status
+            </label>
+            <select
+              v-model="statusFilter"
+              class="form-select form-select-sm"
             >
-              <td>{{ appt.date }}</td>
-              <td>{{ appt.time }}</td>
-              <td>{{ appt.patient_name || appt.patient_username }}</td>
-              <td>
-                <span
-                  class="badge"
-                  :class="{
-                    'bg-secondary': appt.status === 'Booked',
-                    'bg-success': appt.status === 'Completed',
-                    'bg-danger': appt.status === 'Cancelled'
-                  }"
-                >
-                  {{ appt.status }}
-                </span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- RIGHT: Treatment form -->
-      <div class="col-md-5">
-        <h5>Treatment Details</h5>
-
-        <div v-if="!selected" class="text-muted">
-          Select an appointment from the table to add diagnosis and prescription.
-        </div>
-
-        <div v-else>
-          <p>
-            <strong>Patient:</strong>
-            {{ selected.patient_name || selected.patient_username }}<br />
-            <strong>Time:</strong> {{ selected.date }} {{ selected.time }}
-          </p>
-
-          <form @submit.prevent="saveTreatment">
-            <div class="mb-3">
-              <label class="form-label">Diagnosis</label>
-              <textarea
-                v-model="diagnosis"
-                class="form-control"
-                rows="2"
-                required
-              ></textarea>
-            </div>
-
-            <div class="mb-3">
-              <label class="form-label">Prescription</label>
-              <textarea
-                v-model="prescription"
-                class="form-control"
-                rows="2"
-                required
-              ></textarea>
-            </div>
-
-            <div class="mb-3">
-              <label class="form-label">Status</label>
-              <select v-model="status" class="form-select">
-                <option value="Booked">Booked</option>
-                <option value="Completed">Completed</option>
-                <option value="Cancelled">Cancelled</option>
-              </select>
-            </div>
-
-            <button class="btn btn-primary">
-              Save Treatment
+              <option value="">All</option>
+              <option value="Booked">Booked</option>
+              <option value="Completed">Completed</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+          </div>
+          <div class="col-md-3 text-md-end mt-2 mt-md-0">
+            <button
+              class="btn btn-sm btn-outline-secondary"
+              type="button"
+              @click="load"
+            >
+              Refresh
             </button>
-          </form>
+          </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Appointments table -->
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="card-title mb-3">My Appointments</h5>
+
+        <div v-if="loading" class="text-muted">
+          Loading appointments…
+        </div>
+
+        <div v-else class="table-responsive">
+          <table class="table table-sm align-middle">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Patient</th>
+                <th>Status</th>
+                <th style="min-width: 160px;">Diagnosis</th>
+                <th style="min-width: 160px;">Prescription</th>
+                <th style="width: 110px;"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="filteredAppointments.length === 0">
+                <td colspan="7" class="text-muted text-center small">
+                  No appointments found for the current filters.
+                </td>
+              </tr>
+              <tr
+                v-for="appt in filteredAppointments"
+                :key="appt.id"
+              >
+                <td>{{ appt.date }}</td>
+                <td>{{ appt.time }}</td>
+                <td>
+                  {{ appt.patient_name || appt.patient_username || "-" }}
+                </td>
+                <td style="max-width: 140px;">
+                  <select
+                    v-model="appt.status"
+                    class="form-select form-select-sm"
+                  >
+                    <option value="Booked">Booked</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Cancelled">Cancelled</option>
+                  </select>
+                </td>
+                <td>
+                  <input
+                    v-model="appt.diagnosis"
+                    class="form-control form-control-sm"
+                    placeholder="Diagnosis"
+                  />
+                </td>
+                <td>
+                  <input
+                    v-model="appt.prescription"
+                    class="form-control form-control-sm"
+                    placeholder="Prescription"
+                  />
+                </td>
+                <td class="text-end">
+                  <button
+                    class="btn btn-sm btn-primary"
+                    type="button"
+                    @click="saveAppointment(appt)"
+                  >
+                    Save
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
       </div>
     </div>
   </div>

@@ -282,6 +282,7 @@ def list_patient_appointments():
                 "date": a.date,
                 "time": a.time,
                 "status": a.status,
+                
                 "doctor_name": doctor.name if doctor else "",
                 "doctor_username": doctor.username if doctor else "",
                 "diagnosis": a.diagnosis,
@@ -360,26 +361,6 @@ def update_appt(aid):
         }
     )
 
-# ROUTE: Admin → trigger reminders
-@app.post("/api/admin/tasks/reminders")
-@require_auth
-@admin_required
-def admin_trigger_reminders():
-    task = send_today_appointment_reminders.delay()
-    return jsonify({"task_id": task.id}), 202
-
-# ROUTE: Admin → check task status
-@app.get("/api/admin/tasks/<task_id>")
-@require_auth
-@admin_required
-def admin_task_status(task_id):
-    result = AsyncResult(task_id, app=celery)
-    return jsonify({
-        "id": task_id,
-        "state": result.state,
-        "result": str(result.result),
-    })
-
 # ROUTE: Patient → Update own appointment (reschedule / cancel)
 @app.put("/api/patient/appointments/<int:aid>")
 @require_auth
@@ -456,6 +437,7 @@ def admin_list_patients():
             }
         )
     return jsonify(data)
+
 
 # ROUTE: Admin → Summary counts
 @app.get("/api/admin/summary")

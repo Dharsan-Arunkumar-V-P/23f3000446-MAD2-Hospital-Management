@@ -38,7 +38,10 @@ const routes = [
     component: PatientDashboard,
     meta: { requiresAuth: true, role: "patient" },
   },
-  { path: "/:pathMatch(.*)*", redirect: "/login" },
+  {
+  path: "/:pathMatch(.*)*",
+  component: { template: "<h1>404</h1>" }  
+  },
 ];
 
 // INIT: Router
