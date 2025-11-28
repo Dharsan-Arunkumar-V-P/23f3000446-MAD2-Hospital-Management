@@ -1,0 +1,62 @@
+/* Medaleon brand palette */
+:root{
+  --med-red: #b71c1c;     
+  --med-gold: #d4af37;   
+  --med-white: #ffffff;
+  --med-muted: #f8f6f2;
+  --card-shadow: 0 6px 18px rgba(0,0,0,0.06);
+  --radius-lg: 12px;
+}
+
+/* override Bootstrap primary */
+.btn-primary {
+  background-color: var(--med-red) !important;
+  border-color: var(--med-red) !important;
+  color: var(--med-white) !important;
+  border-radius: 10px;
+  box-shadow: var(--card-shadow);
+}
+
+/* outlines */
+.btn-outline-primary {
+  color: var(--med-red);
+  border-color: var(--med-red);
+}
+
+.bg-med-gold {
+  background: linear-gradient(90deg, rgba(212,175,55,0.12), rgba(212,175,55,0.04));
+  border-left: 4px solid var(--med-gold);
+}
+
+/* Card style for unified look */
+.card-med {
+  border: 0;
+  background: var(--med-white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--card-shadow);
+  padding: 16px;
+}
+
+/* Headings */
+.page-title {
+  font-weight: 700;
+  margin-bottom: 0.6rem;
+  color: #222;
+}
+
+/* small badge tweaks */
+.badge {
+  border-radius: 10px;
+  padding: 6px 8px;
+}
+
+/* layout helpers */
+.row-gap {
+  gap: 1rem;
+}
+
+/* responsive tweaks for small screens */
+@media (max-width: 768px) {
+  .card-med { padding: 12px; border-radius: 8px; }
+  .page-title { font-size: 1.1rem; }
+}

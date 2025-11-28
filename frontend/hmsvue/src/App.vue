@@ -39,8 +39,7 @@ function logout() {
 <template>
   <div>
     <nav class="navbar navbar-expand navbar-dark bg-dark px-3">
-      <span class="navbar-brand fw-bold">HMS</span>
-      <a class="navbar-brand" href="#">
+      <a class="navbar-brand fw-bold" href="#">
       <img src="/icon-192.png" alt="Medaleon" style="height:28px; margin-right:8px" />
       Medaleon
       </a>

@@ -6,6 +6,7 @@ import router from "./router";
 // SETUP: Styles (Bootstrap)
 import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap";
+import "@/styles/theme.css";
 
 // INIT: Create app and mount
 createApp(App).use(router).mount("#app");
