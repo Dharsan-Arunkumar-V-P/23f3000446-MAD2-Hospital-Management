@@ -17,10 +17,8 @@
 
     <div v-else>
       <div class="row">
-        
         <!-- LEFT COLUMN -->
         <div class="col-lg-8">
-          
           <!-- APPOINTMENTS -->
           <div class="card-med mb-4">
             <div class="d-flex justify-content-between align-items-center mb-2">
@@ -50,7 +48,6 @@
                   </tr>
                 </thead>
                 <tbody>
-                  
                   <tr v-if="loadingAppts">
                     <td colspan="5" class="text-center text-muted">Loading…</td>
                   </tr>
@@ -114,7 +111,6 @@
 
             <div v-else class="list-group">
               <div class="list-group-item d-flex justify-content-between" v-for="d in doctors" :key="d.id">
-                
                 <div>
                   <strong>{{ d.name }}</strong>
                   <div class="small text-muted">{{ d.specialization || "General" }}</div>
@@ -149,7 +145,6 @@
             </div>
 
             <div class="overview-grid-3col">
-              
               <div class="stat stat-large">
                 <div class="stat-label">Appointments</div>
                 <div class="stat-value">{{ summary.total_appointments }}</div>
@@ -244,7 +239,7 @@
             <input v-model="editForm.specialization" class="form-control mb-3" placeholder="Specialization" />
             <div class="d-flex justify-content-end gap-2">
               <button class="btn btn-outline-secondary" @click="closeEdit" type="button">Cancel</button>
-              <button class="btn btn-primary" type="submit">Save</button>
+              <button class="btn btn-primary" type="submit" :disabled="savingEdit">{{ savingEdit ? "Saving…" : "Save" }}</button>
             </div>
           </form>
         </div>
@@ -258,8 +253,8 @@
             Are you sure you want to remove <strong>{{ removing.name }}</strong>?
           </p>
           <div class="d-flex justify-content-end gap-2">
-            <button class="btn btn-outline-secondary" @click="cancelRemove">Cancel</button>
-            <button class="btn btn-danger" @click="removeDoctor">Remove</button>
+            <button class="btn btn-outline-secondary" @click="cancelRemove" type="button">Cancel</button>
+            <button class="btn btn-danger" @click="removeDoctor" :disabled="removingLoading">{{ removingLoading ? "Removing…" : "Remove" }}</button>
           </div>
         </div>
       </div>
@@ -275,10 +270,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from "vue";
 
-/*
-   API IMPORT (Safe dynamic import + fallback)
-
-*/
+/* IMPORT / API */
 const api = ref(null);
 const apiError = ref(false);
 const apiErrorMessage = ref("");
@@ -298,6 +290,7 @@ async function tryImportApi() {
       return;
     }
   }
+  resolveApiFns();
 }
 
 function getFn(names) {
@@ -310,7 +303,7 @@ function getFn(names) {
   return null;
 }
 
-/* Resolve API functions */
+/* INIT / FUNCTION RESOLVE */
 let fnGetMe, fnListDoctors, fnAddDoctor, fnUpdateDoctor, fnRemoveDoctor,
     fnListAppointments, fnSummary, fnRunSim, fnSimStatus;
 
@@ -324,16 +317,25 @@ function resolveApiFns() {
   fnSummary = getFn(["apiAdminSummary", "summary"]);
   fnRunSim = getFn(["apiAdminRunSimulationTask", "runSimulation"]);
   fnSimStatus = getFn(["apiAdminSimulationStatus", "simulationStatus"]);
+
+  console.info("API functions resolved:", {
+    fnGetMe: !!fnGetMe,
+    fnListDoctors: !!fnListDoctors,
+    fnAddDoctor: !!fnAddDoctor,
+    fnUpdateDoctor: !!fnUpdateDoctor,
+    fnRemoveDoctor: !!fnRemoveDoctor,
+    fnListAppointments: !!fnListAppointments,
+    fnSummary: !!fnSummary,
+    fnRunSim: !!fnRunSim,
+    fnSimStatus: !!fnSimStatus,
+  });
 }
 
 function unwrap(r) {
   return r?.data ?? r;
 }
 
-/*
-   STATE
-
-*/
+/* STATE */
 const me = ref(null);
 const doctors = ref([]);
 const appts = ref([]);
@@ -378,17 +380,17 @@ const form = reactive({
   password: "",
 });
 
-/* Toast */
+/* UX FLAGS */
 const toast = ref("");
+const savingEdit = ref(false);
+const removingLoading = ref(false);
+
 function showToast(msg) {
   toast.value = msg;
   setTimeout(() => (toast.value = ""), 2200);
 }
 
-/*
-   COMPUTED
-
-*/
+/* COMPUTED */
 const patientsUnique = computed(() => {
   const set = new Set();
   for (const a of appts.value) {
@@ -414,7 +416,6 @@ const apptsFiltered = computed(() => {
     );
   }
 
-  // correct absolute sorting using real Date objects
   const dt = (a) => new Date(`${a.date} ${a.time}`);
 
   switch (sortKey.value) {
@@ -435,12 +436,12 @@ const apptsFiltered = computed(() => {
   return list;
 });
 
-/*
-   FETCHERS
-
-*/
+/* FETCHERS */
 async function fetchMe() {
-  if (!fnGetMe) return;
+  if (!fnGetMe) {
+    console.warn("fetchMe: api function missing");
+    return;
+  }
   try {
     const r = unwrap(await fnGetMe());
     me.value = r?.user || r || me.value;
@@ -450,7 +451,10 @@ async function fetchMe() {
 }
 
 async function fetchDoctors() {
-  if (!fnListDoctors) return;
+  if (!fnListDoctors) {
+    console.warn("fetchDoctors: api function missing");
+    return;
+  }
   try {
     const r = unwrap(await fnListDoctors());
     doctors.value = r?.doctors || r || [];
@@ -460,7 +464,10 @@ async function fetchDoctors() {
 }
 
 async function fetchAppointments(status = "") {
-  if (!fnListAppointments) return;
+  if (!fnListAppointments) {
+    console.warn("fetchAppointments: api function missing");
+    return;
+  }
   loadingAppts.value = true;
   try {
     const r = unwrap(await fnListAppointments(status ? { status } : undefined));
@@ -473,7 +480,10 @@ async function fetchAppointments(status = "") {
 }
 
 async function fetchSummary() {
-  if (!fnSummary) return;
+  if (!fnSummary) {
+    console.warn("fetchSummary: api function missing");
+    return;
+  }
   loadingSummary.value = true;
   try {
     const r = unwrap(await fnSummary());
@@ -485,10 +495,7 @@ async function fetchSummary() {
   }
 }
 
-/*
-   ACTIONS
-
-*/
+/* ACTIONS */
 async function refreshAll() {
   search.value = "";
   statusFilter.value = "";
@@ -509,10 +516,12 @@ function filterByStatus(status) {
   fetchAppointments(status);
 }
 
-/* ========== ADD DOCTOR ========== */
+/* ADD DOCTOR */
 async function addDoctor() {
   if (!fnAddDoctor) {
     addError.value = "Add API not available";
+    showToast("Add API missing — check console");
+    console.error("addDoctor: fnAddDoctor missing");
     return;
   }
 
@@ -534,6 +543,7 @@ async function addDoctor() {
   } catch (err) {
     console.error("addDoctor:", err);
     addError.value = err.message || "Failed to add doctor";
+    showToast(addError.value);
   } finally {
     addingDoctor.value = false;
   }
@@ -547,7 +557,7 @@ function toggleEditMode() {
   editMode.value = !editMode.value;
 }
 
-/* ========== EDIT DOCTOR ========== */
+/* EDIT DOCTOR */
 function openEdit(d) {
   editForm.id = d.id;
   editForm.name = d.name;
@@ -563,28 +573,133 @@ function closeEdit() {
 }
 
 async function saveEdit() {
-  if (!fnUpdateDoctor) return;
+  console.info("saveEdit START", JSON.stringify(editForm));
+
+  if (!fnUpdateDoctor) {
+    console.error("saveEdit: fnUpdateDoctor missing");
+    showToast("Update API missing — check console");
+    return;
+  }
+
+  if (!editForm.id && !editForm._id && !editForm.username) {
+    console.error("saveEdit: missing id on editForm", editForm);
+    showToast("Invalid doctor id");
+    return;
+  }
+
+  if (!editForm.name || !editForm.name.trim()) {
+    showToast("Name is required");
+    return;
+  }
+
+  // helper: get id from doctor object tolerant of different key names
+  const getId = (d) => d?.id ?? d?._id ?? d?.username ?? null;
+  const targetId = editForm.id ?? editForm._id ?? editForm.username;
+
+  // find index by trying multiple id keys
+  let idx = doctors.value.findIndex((x) => {
+    return getId(x) === targetId || String(getId(x)) === String(targetId);
+  });
+
+  console.info("saveEdit: resolved targetId", targetId, "found index", idx);
+
+  const original = idx >= 0 ? { ...doctors.value[idx] } : null;
+
+  // optimistic update: create a new object and splice it in to preserve reactivity
+  const optimistic = {
+    ...(original || {}),
+    id: targetId,
+    _id: targetId,
+    name: editForm.name,
+    specialization: editForm.specialization,
+  };
+
+  if (idx >= 0) {
+    // replace existing object (ensures reactivity)
+    doctors.value.splice(idx, 1, optimistic);
+    console.info("saveEdit: applied optimistic update at index", idx, optimistic);
+  } else {
+    // if not found, push to front so user sees change immediately
+    doctors.value.unshift(optimistic);
+    idx = 0;
+    console.info("saveEdit: couldn't find original, added optimistic object", optimistic);
+  }
+
+  savingEdit.value = true;
   try {
-    const res = unwrap(
-      await fnUpdateDoctor(editForm.id, {
-        name: editForm.name,
-        specialization: editForm.specialization,
-      })
-    );
+    const payload = { name: editForm.name, specialization: editForm.specialization };
+    console.info("saveEdit: calling API with payload", payload, "id:", targetId);
+
+    const res = unwrap(await fnUpdateDoctor(targetId, payload));
+    console.info("saveEdit: raw API response", res);
 
     if (res?.error) throw new Error(res.error);
 
-    editing.value = false;
-    await Promise.all([fetchDoctors(), fetchSummary()]);
-    showToast("Doctor updated");
+    // server returned a canonical updated doctor? accept it (handle multiple shapes)
+    const serverDoctor =
+      res?.data?.doctor ?? res?.doctor ?? res?.data ?? null;
 
+    if (serverDoctor && typeof serverDoctor === "object") {
+      // ensure we use correct id key
+      const sid = serverDoctor.id ?? serverDoctor._id ?? serverDoctor.username ?? targetId;
+      const i = doctors.value.findIndex((x) => (x.id ?? x._id ?? x.username) === sid);
+      if (i >= 0) {
+        doctors.value.splice(i, 1, serverDoctor);
+        console.info("saveEdit: replaced optimistic with server doctor at", i, serverDoctor);
+      } else {
+        // if not found, add it
+        doctors.value.unshift(serverDoctor);
+        console.info("saveEdit: prepended server doctor", serverDoctor);
+      }
+    } else {
+      // no object returned — ensure we at least refresh summary and keep optimistic
+      console.info("saveEdit: no server doctor returned, keeping optimistic and refreshing summary.");
+      await fetchSummary();
+    }
+
+    editing.value = false;
+    showToast("Doctor updated");
+    console.info("saveEdit: SUCCESS");
   } catch (err) {
-    console.error("saveEdit:", err);
-    showToast("Failed to update");
+    console.error("saveEdit: ERROR", err);
+
+    // revert optimistic change if we have original
+    if (original) {
+      const findIdx = doctors.value.findIndex((x) => (x.id ?? x._id ?? x.username) === (original.id ?? original._id ?? original.username));
+      if (findIdx >= 0) {
+        doctors.value.splice(findIdx, 1, original);
+        console.info("saveEdit: reverted optimistic to original at", findIdx);
+      } else {
+        // not found — ensure list refresh
+        await fetchDoctors();
+        console.info("saveEdit: original not in list, refreshed doctors from server");
+      }
+    } else {
+      // we added optimistic item earlier — remove it if it wasn't backed by server
+      const addedIdx = doctors.value.findIndex((x) => (x.id ?? x._id ?? x.username) === targetId);
+      if (addedIdx >= 0) {
+        doctors.value.splice(addedIdx, 1);
+        console.info("saveEdit: removed optimistic added item at", addedIdx);
+      } else {
+        await fetchDoctors();
+        console.info("saveEdit: could not revert; refreshed doctors");
+      }
+    }
+
+    // friendly message from server if available
+    const serverMsg = err?.response?.data?.message || err?.message || "Failed to update";
+    showToast(serverMsg);
+  } finally {
+    savingEdit.value = false;
+    // as a final safety net, ensure UI is up-to-date
+    setTimeout(() => {
+      // small delay then ensure length consistency
+      if (!doctors.value || doctors.value.length === 0) fetchDoctors();
+    }, 100);
   }
 }
 
-/* ========== REMOVE DOCTOR ========== */
+/* REMOVE DOCTOR */
 function confirmRemove(d) {
   removing.value = d;
 }
@@ -594,8 +709,21 @@ function cancelRemove() {
 }
 
 async function removeDoctor() {
-  if (!fnRemoveDoctor) return;
+  if (!removing.value || !removing.value.id) {
+    showToast("No doctor selected");
+    return;
+  }
 
+  // backup locally BEFORE the API call (so we can restore)
+  backupLastRemoved(removing.value);
+
+  if (!fnRemoveDoctor) {
+    console.error("removeDoctor: remove API missing");
+    showToast("Remove API missing — check console");
+    return;
+  }
+
+  removingLoading.value = true;
   try {
     const res = unwrap(await fnRemoveDoctor(removing.value.id));
     if (res?.error) throw new Error(res.error);
@@ -603,17 +731,22 @@ async function removeDoctor() {
     removing.value = null;
     await Promise.all([fetchDoctors(), fetchSummary()]);
     showToast("Doctor removed");
-
+    console.info("removeDoctor success", res);
   } catch (err) {
     console.error("removeDoctor:", err);
-    showToast("Failed to remove");
+    // show server message if available
+    const serverMsg = err?.response?.data?.message || err?.message || "Failed to remove";
+    showToast(serverMsg);
+  } finally {
+    removingLoading.value = false;
   }
 }
 
-/* ========== SIMULATION ========== */
+/* SIMULATION */
 async function runSimulation() {
   if (!fnRunSim) {
     simMessage.value = "Simulation API missing";
+    showToast("Simulation API missing");
     return;
   }
 
@@ -634,6 +767,7 @@ async function runSimulation() {
 async function checkSimulation() {
   if (!fnSimStatus) {
     simMessage.value = "Simulation status API missing";
+    showToast("Simulation status API missing");
     return;
   }
 
@@ -651,25 +785,57 @@ async function checkSimulation() {
   }
 }
 
-/*
-   MOUNT
-
-*/
+/* MOUNT / STARTUP */
 onMounted(async () => {
   await tryImportApi();
-  if (!api.value) return;
-
-  resolveApiFns();
+  if (!api.value) {
+    return;
+  }
 
   if (!fnGetMe || !fnListDoctors || !fnListAppointments || !fnSummary) {
     apiError.value = true;
-    apiErrorMessage.value = "Required API functions missing.";
+    apiErrorMessage.value = "Required API functions missing. Check console for resolved function map.";
+    console.error("Missing required API functions:", {
+      fnGetMe: !!fnGetMe,
+      fnListDoctors: !!fnListDoctors,
+      fnListAppointments: !!fnListAppointments,
+      fnSummary: !!fnSummary,
+    });
     return;
   }
 
   await fetchMe();
   await refreshAll();
 });
+
+// UX: last removed backup so admin can undo
+const lastRemovedDoctor = ref(null);
+
+function backupLastRemoved(d) {
+  if (!d) return;
+  try {
+    localStorage.setItem("medaleon_last_removed_doctor", JSON.stringify(d));
+    lastRemovedDoctor.value = d;
+    console.info("Backed up last removed doctor", d);
+  } catch (e) {
+    console.error("backupLastRemoved failed", e);
+  }
+}
+
+function loadLastRemovedBackup() {
+  try {
+    const raw = localStorage.getItem("medaleon_last_removed_doctor");
+    if (raw) lastRemovedDoctor.value = JSON.parse(raw);
+  } catch (e) {
+    console.error("loadLastRemovedBackup failed", e);
+  }
+}
+
+function clearLastRemovedBackup() {
+  localStorage.removeItem("medaleon_last_removed_doctor");
+  lastRemovedDoctor.value = null;
+}
+
 </script>
 
 <style scoped>

@@ -19,7 +19,28 @@ app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///../instance/hms.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db.init_app(app)
-CORS(app)
+CORS(
+    app,
+    resources={r"/*": {"origins": ["http://localhost:5173"]}},
+    supports_credentials=True,
+    allow_headers=["Content-Type", "Authorization"],
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+)
+
+# --- Force-correct handling for preflight OPTIONS (place this AFTER app = Flask(...) ) ---
+from flask import make_response
+
+@app.before_request
+def _handle_options_preflight():
+    # allow immediate OK for OPTIONS preflights so auth decorators don't block them
+    if request.method == "OPTIONS":
+        resp = make_response()
+        resp.headers["Access-Control-Allow-Origin"] = "http://localhost:5173"
+        resp.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
+        resp.headers["Access-Control-Allow-Credentials"] = "true"
+        return resp
+# -------------------------------------------------------------------------------
 
 # INIT: Create tables and default admin user
 with app.app_context():
@@ -360,6 +381,67 @@ def update_appt(aid):
             "prescription": appt.prescription,
         }
     )
+
+# ROUTE: Admin → Update doctor
+@app.put("/api/admin/doctors/<int:did>")
+@require_auth
+@admin_required
+def admin_update_doctor(did):
+    data = request.get_json() or {}
+    name = (data.get("name") or "").strip()
+    specialization = (data.get("specialization") or "").strip()
+
+    doc = User.query.get(did)
+    if not doc or doc.role != ROLE_DOCTOR:
+        return jsonify({"error": "Doctor not found"}), 404
+
+    if name:
+        doc.name = name
+    if specialization is not None:
+        doc.specialization = specialization
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Failed to update doctor"}), 500
+
+    return jsonify({
+        "id": doc.id,
+        "username": doc.username,
+        "name": doc.name,
+        "email": doc.email,
+        "specialization": doc.specialization
+    }), 200
+
+
+# ROUTE: Admin → Remove doctor
+
+# ROUTE: Admin → Remove doctor (deletes dependent appointments first)
+@app.delete("/api/admin/doctors/<int:did>")
+@require_auth
+@admin_required
+def admin_remove_doctor(did):
+    doc = User.query.get(did)
+    if not doc or doc.role != ROLE_DOCTOR:
+        return jsonify({"error": "Doctor not found"}), 404
+
+    try:
+        # Remove all appointments that reference this doctor first (prevents FK/constraint errors)
+        # Note: .delete() performs bulk delete via SQL; commit afterwards.
+        from dba import Appointment
+        Appointment.query.filter_by(doctor_id=did).delete()
+
+        # Now delete the doctor
+        db.session.delete(doc)
+        db.session.commit()
+
+        return jsonify({"ok": True, "id": did}), 200
+    except Exception as e:
+        db.session.rollback()
+        print("Delete doctor error:", e)
+        return jsonify({"error": "Failed to remove doctor"}), 500
+
 
 # ROUTE: Patient → Update own appointment (reschedule / cancel)
 @app.put("/api/patient/appointments/<int:aid>")
