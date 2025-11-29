@@ -3,12 +3,13 @@ info:
   title: HMS API – Hospital Management System
   version: 1.0.0
   description: >
-    REST API for HMS (Hospital Management System) built for MAD-2.
-    Supports JWT authentication, Admin/Doctor/Patient roles, Doctor management,
-    Appointment booking, and Treatment recording.
+    REST API for Medaleon (HMS-V2) built for MAD-2.
+    Supports role-based access for Admin / Doctor / Patient, doctor management,
+    appointment booking, treatment recording, dashboard summary and simulation tasks.
 
 servers:
   - url: http://localhost:5000
+    description: Local development server
 
 components:
   securitySchemes:
@@ -22,67 +23,166 @@ components:
     User:
       type: object
       properties:
-        id: { type: integer }
-        username: { type: string }
-        name: { type: string }
-        email: { type: string }
-        role: { type: string }
-        specialization: { type: string }
+        id:
+          type: integer
+        username:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          description: one of "admin", "doctor", "patient"
+        specialization:
+          type: string
+          nullable: true
 
     DoctorInput:
       type: object
-      required: [username, name, email, specialization, password]
+      required:
+        - username
+        - name
+        - password
       properties:
-        username: { type: string }
-        name: { type: string }
-        email: { type: string }
-        specialization: { type: string }
-        password: { type: string }
+        username:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        specialization:
+          type: string
+        password:
+          type: string
 
     RegisterInput:
       type: object
-      required: [username, name, email, password]
+      required:
+        - username
+        - name
+        - password
       properties:
-        username: { type: string }
-        name: { type: string }
-        email: { type: string }
-        password: { type: string }
+        username:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
 
     LoginInput:
       type: object
-      required: [username, password]
+      required:
+        - username
+        - password
       properties:
-        username: { type: string }
-        password: { type: string }
+        username:
+          type: string
+        password:
+          type: string
 
     LoginOutput:
       type: object
       properties:
-        token: { type: string }
-        role: { type: string }
+        token:
+          type: string
+        role:
+          type: string
 
     AppointmentInput:
       type: object
-      required: [doctor_id, date, time]
+      required:
+        - doctor_id
+        - date
+        - time
       properties:
-        doctor_id: { type: integer }
-        date: { type: string }
-        time: { type: string }
+        doctor_id:
+          type: integer
+        date:
+          type: string
+          format: date
+        time:
+          type: string
+          description: local time string (e.g. "14:30")
+
+    Appointment:
+      type: object
+      properties:
+        id:
+          type: integer
+        doctor_id:
+          type: integer
+        doctor_name:
+          type: string
+        patient_id:
+          type: integer
+        patient_name:
+          type: string
+        date:
+          type: string
+          format: date
+        time:
+          type: string
+        status:
+          type: string
+          enum: [Booked, Completed, Cancelled]
 
     TreatmentInput:
       type: object
-      required: [diagnosis, prescription, notes]
       properties:
-        diagnosis: { type: string }
-        prescription: { type: string }
-        notes: { type: string }
+        diagnosis:
+          type: string
+        prescription:
+          type: string
+        notes:
+          type: string
 
+    TreatmentOutput:
+      type: object
+      properties:
+        appointment_id:
+          type: integer
+        diagnosis:
+          type: string
+        prescription:
+          type: string
+        notes:
+          type: string
+
+    Summary:
+      type: object
+      properties:
+        total_doctors:
+          type: integer
+        total_patients:
+          type: integer
+        total_appointments:
+          type: integer
+        booked:
+          type: integer
+        completed:
+          type: integer
+        cancelled:
+          type: integer
+
+    SimulationStatus:
+      type: object
+      properties:
+        status:
+          type: string
+        message:
+          type: string
+        last_run:
+          type: string
+          description: ISO timestamp or readable timestamp
 
 paths:
 
-  /api/register:
+  /api/auth/register:
     post:
-      summary: Register new patient
+      summary: Register a new patient
       requestBody:
         required: true
         content:
@@ -90,14 +190,18 @@ paths:
             schema:
               $ref: '#/components/schemas/RegisterInput'
       responses:
-        "200":
+        "201":
           description: Patient registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
         "400":
-          description: User already exists
+          description: Validation error / user already exists
 
-  /api/login:
+  /api/auth/login:
     post:
-      summary: Login and get JWT token
+      summary: Login (returns token and role)
       requestBody:
         required: true
         content:
@@ -111,29 +215,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LoginOutput'
-        "400":
+        "401":
           description: Invalid credentials
 
-
-  /api/me:
-    get:
-      summary: Get current logged user details
+  /api/auth/logout:
+    post:
+      summary: Logout (invalidate server session or token)
       security:
         - BearerAuth: []
       responses:
         "200":
-          description: User profile returned
+          description: Logged out
+
+  /api/auth/me:
+    get:
+      summary: Get current logged-in user profile
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: User profile
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/User'
         "401":
-          description: Token invalid or expired
+          description: Unauthorized / invalid token
 
-
+  # -----------------------
+  # Admin: doctor management
+  # -----------------------
   /api/admin/doctors:
     post:
-      summary: Admin adds a new doctor
+      summary: Admin - create a doctor account
       security:
         - BearerAuth: []
       requestBody:
@@ -143,11 +257,17 @@ paths:
             schema:
               $ref: '#/components/schemas/DoctorInput'
       responses:
-        "200": { description: Doctor added }
-        "403": { description: Admin access required }
+        "201":
+          description: Doctor created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        "403":
+          description: Admin access required
 
     get:
-      summary: Admin lists all doctors
+      summary: Admin - list all doctors
       security:
         - BearerAuth: []
       responses:
@@ -159,12 +279,153 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/User'
-        "403": { description: Admin access required }
+        "403":
+          description: Admin access required
 
+  /api/admin/doctors/{id}:
+    get:
+      summary: Admin - fetch a single doctor
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Doctor object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        "404":
+          description: Not found
 
+    put:
+      summary: Admin - update a doctor
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                email: { type: string }
+                specialization: { type: string }
+      responses:
+        "200":
+          description: Updated
+        "403":
+          description: Admin access required
+
+    delete:
+      summary: Admin - remove (deactivate) a doctor
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Removed
+        "403":
+          description: Admin access required
+
+  # -----------------------
+  # Admin: appointments & summary & simulation
+  # -----------------------
+  /api/admin/appointments:
+    get:
+      summary: Admin - list all appointments (optionally filter by status)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [Booked, Completed, Cancelled]
+      responses:
+        "200":
+          description: Appointments list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Appointment'
+        "403":
+          description: Admin access required
+
+  /api/admin/summary:
+    get:
+      summary: Admin - dashboard summary (counts)
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Dashboard counts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Summary'
+        "403":
+          description: Admin access required
+
+  /api/admin/simulation/run:
+    post:
+      summary: Admin - run a backend simulation task (scheduling / cancellations)
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Simulation started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        "403":
+          description: Admin access required
+
+  /api/admin/simulation/status:
+    get:
+      summary: Admin - get last simulation status
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Simulation status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulationStatus'
+        "403":
+          description: Admin access required
+
+  # -----------------------
+  # Patient: appointments
+  # -----------------------
   /api/patient/appointments:
     post:
-      summary: Patient books appointment
+      summary: Patient - create (book) an appointment
       security:
         - BearerAuth: []
       requestBody:
@@ -174,22 +435,104 @@ paths:
             schema:
               $ref: '#/components/schemas/AppointmentInput'
       responses:
-        "200":
-          description: Appointment booked
+        "201":
+          description: Appointment created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+        "400":
+          description: Validation failed (double-booking, past date)
         "403":
           description: Patient access required
 
+    get:
+      summary: Patient - list own appointments
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: List of appointments for current patient
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Appointment'
+        "403":
+          description: Patient access required
 
-  /api/doctor/appointments/{id}:
-    put:
-      summary: Doctor updates appointment with treatment notes
+  /api/appointments/{id}:
+    get:
+      summary: Get appointment details
       security:
         - BearerAuth: []
       parameters:
         - name: id
           in: path
           required: true
-          schema: { type: integer }
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Appointment returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+        "404":
+          description: Not found
+
+    post:
+      summary: Patient - cancel an appointment
+      description: Marks the appointment as Cancelled (patient endpoint)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Cancelled
+        "403":
+          description: Patient access required
+        "404":
+          description: Appointment not found
+
+  # -----------------------
+  # Doctor: manage own appointments (update status, add treatment)
+  # -----------------------
+  /api/doctor/appointments:
+    get:
+      summary: Doctor - list own appointments (upcoming & past)
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Appointments for doctor
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Appointment'
+        "403":
+          description: Doctor access required
+
+  /api/doctor/appointments/{id}:
+    put:
+      summary: Doctor - update appointment (status + treatment)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
       requestBody:
         required: true
         content:
@@ -199,7 +542,14 @@ paths:
       responses:
         "200":
           description: Treatment updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TreatmentOutput'
         "403":
           description: Doctor access required
         "404":
           description: Appointment not found
+
+security:
+  - BearerAuth: []
