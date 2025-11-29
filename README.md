@@ -96,7 +96,7 @@ project-root/
 
 # 1. Create virtual environment (optional but recommended)
 python -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
+  venv\Scripts\activate
 
 # 2. Install Python dependencies
 pip install -r requirements.txt
@@ -106,13 +106,14 @@ flask --app app.py init-db
 
 # 4. Run Flask API
 flask --app app.py run
+
 # API base URL: http://localhost:5000/api
 
 5. How to Run (Frontend – VueJS)
 cd frontend
 npm install
-npm run dev   # or npm run serve, depending on setup
-# Frontend URL: http://localhost:5173 or http://localhost:8080
+npm run dev  
+# Frontend URL: http://localhost:5173
 
 6. OpenAPI Specification
 

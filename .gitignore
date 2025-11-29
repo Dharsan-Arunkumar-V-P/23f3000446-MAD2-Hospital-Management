@@ -1,6 +1,13 @@
 venv/
+env/
+instance/
 __pycache__/
-instance/*.db
+*.pyc
+
 frontend/hmsvue/node_modules/
-.env
-.DS_Store
+frontend/hmsvue/dist/
+
+backend/instance/hms.db
+
+.vscode/
+*.log
