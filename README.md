@@ -1,124 +1,218 @@
-# MAD-2 Hospital Management System V2 (HMS-V2)
+# Medaleon Hospital Management System (MAD-2)
 
-Hospital Management System V2 is the **MAD-2 upgrade** of my MAD-1 project.
+Medaleon HMS is my **Modern Application Development II** project, built as a full-stack hospital scheduling and treatment management platform.
 
-- Backend: **Flask** REST API with SQLite, Redis cache, and Celery background jobs  
-- Frontend: **VueJS** SPA consuming the Flask API  
-- Roles: **Admin, Doctor, Patient**
+It is the upgraded continuation of my MAD-1 system, redesigned with:
+- a **Vue 3 SPA frontend**,  
+- a **Flask REST backend**, and  
+- role-specific dashboards for **Admin**, **Doctor**, and **Patient**.
 
-Admins manage doctors and monitor the system, doctors handle treatments, and patients book / cancel appointments and view their medical history.
+The goal was to create a realistic clinic management workflow including appointment booking, treatment updates, role-based access, and an admin-level simulation runner.
 
-## 1. Tech Stack
+## 1. Features at a Glance
 
-### Backend (API)
-- Python 3
-- **Flask** – web framework / routing
-- **Flask-SQLAlchemy** – ORM on **SQLite**
-- **Flask-Login** – session & authentication
-- **Flask-Bcrypt** – password hashing
-- **Flask-CORS** – allow VueJS frontend to call the API
-- **Redis** – caching (frequently used lists such as doctors, departments)
-- **Celery** – background jobs (reminders, report generation)
-- **OpenAPI (YAML)** – API documentation (`api.yaml`)
+### **Admin**
+- Auto-created default admin (`admin / admin`) on first run :contentReference[oaicite:5]{index=5}  
+- Manage doctors (add, edit, remove)  
+- View:
+  - All appointments (with doctor/patient names & status)
+  - All registered patients
+  - Summary metrics (counts of doctors, patients, bookings, etc.)  
+- Run background **simulation task** (threaded)  
+- Check simulation status (timestamped)  
 
-### Frontend (UI)
-- **VueJS 3** (via Vue CLI or Vite)
-- **Axios** for HTTP calls to Flask API
-- **Bootstrap 5** for styling
-- **Chart.js** (via `vue-chartjs`) for analytics charts
+### **Doctor**
+- View **all appointments assigned to them**  
+- Update:
+  - Appointment status (Booked → Completed / Cancelled)
+  - Diagnosis
+  - Prescription  
+- Patient name lookups included in appointment responses  
 
-## 2. Core Features (MAD-2)
+### **Patient**
+- Register & login  
+- Book appointments with:
+  - Doctor selection
+  - Date/time validation
+  - Full conflict-prevention (prevents double-bookings)  
+- Reschedule or cancel own appointments  
+- View treatment details (diagnosis + prescription)
 
-### Admin
-- Auto-created **Super Admin**
-  - Username: `admin`
-  - Password: `admin`
-- Dashboard:
-  - Total doctors, patients, appointments (fetched via API)
-  - Charts: appointment trends per day / specialization
-- Manage Doctors:
-  - Create doctor accounts with specialization & availability
-  - Edit / deactivate doctor profiles
-- View all appointments and treatments
+## 2. Tech Stack
 
-### Doctor
-- View upcoming appointments
-- Update appointment **status** (Booked / Completed / Cancelled)
-- Record **diagnosis**, **prescription**, and notes (Treatment)
-- See patient history for their own patients
+### **Frontend (Vue 3 + Vite)**  
+- Vue 3 (Composition API)  
+- Vue Router with role-based navigation guards :contentReference[oaicite:6]{index=6}  
+- Axios for API calls  
+- Bootstrap 5  
+- Custom splash screen, theme CSS, Medaleon branding  
+- PWA basics (manifest + service worker)
+- Fake background simulation
 
-### Patient
-- Register and login
-- View list of departments and available doctors
-- Book appointments with date/time validation + double-booking checks
-- Cancel appointments
-- View treatment history (diagnosis + prescription)
-
-### System-level
-- **Redis caching** for read-heavy data (doctor list, department list, dashboard metrics)
-- **Celery tasks** for:
-  - Sending reminder emails / console logs for appointments
-  - Generating monthly summary reports (stored as PDF/JSON)
-- **OpenAPI spec** (`api.yaml`) describing all important endpoints
-
+### **Backend (Flask REST API)**  
+- Flask  
+- Flask-SQLAlchemy (SQLite DB)  
+- bcrypt password hashing  
+- Custom JWT auth (`create_token`, `require_auth`)  
+- Role decorators: `admin_required`, `doctor_required`, `patient_required`  
+- Background simulation via Python threads  
 
 ## 3. Project Structure
 
 project-root/
 │
-├── app.py               # Flask app + API routes
-├── dba.py               # SQLAlchemy models (User, Doctor, Patient, Department, Appointment, Treatment)
-├── authutils.py         # Role-based decorators
-├── api.yaml             # OpenAPI 3 specification
-├── requirements.txt     # Python dependencies
-├── ER-diagram.png       # ER diagram for MAD-2 schema
-├── README.md            # This file
+├── backend/
+│   ├── app.py                 # Main Flask API (routes, auth, admin seed)  
+│   ├── dba.py                 # DB models: User, Appointment, Treatment    
+│   ├── authutils.py           # JWT + role-based access control
+│   ├── api.yaml               # API spec (optional)
+│   ├── instance/hms.db        # SQLite database
+│   └── requirements.txt
 │
-├── instance/
-│   └── hms.db           # SQLite DB (auto-created)
+├── frontend/hmsvue/
+│   ├── public/                # Icons, manifest, serviceworker
+│   ├── src/
+│   │   ├── views/             # Admin, Doctor, Patient, Login, Register
+│   │   ├── components/        # SplashScreen, OverviewCard
+│   │   ├── api.js             # Axios API helpers                       
+│   │   ├── router.js          # Route definitions + guards              
+│   │   └── styles/            # theme.css, global UI styles
+│   ├── package.json
+│   └── vite.config.js
 │
-├── static/              # (optional) backend-only static assets
-│
-├── templates/           # Only minimal entry HTML if needed
-│   └── index.html       # Optional initial mount point for Vue (or simple landing page)
-│
-└── frontend/            # VueJS SPA
-    ├── package.json
-    ├── src/
-    │   ├── main.js
-    │   ├── App.vue
-    │   ├── api/        # Axios helpers
-    │   ├── views/      # Login, Dashboard, DoctorView, PatientView
-    │   └── components/
-    └── public/
+└── reports/
+    ├── ER-diagram.png
+    └── Screenshots/           # System screenshots
 
-4. How to Run (Backend)
+## 4. Authentication & Authorization
 
-# 1. Create virtual environment (optional but recommended)
+### JWT-based:
+Every login returns:
+```json
+{ "token": "...", "role": "admin/doctor/patient" }
+````
+Stored in `localStorage` (Frontend) → automatically attached to Axios headers.
+Protected routes on backend use:
+
+* `@require_auth`
+* `@admin_required`
+* `@doctor_required`
+* `@patient_required`
+
+Browser routing is enforced by Vue Router:
+
+```js
+meta: { requiresAuth: true, role: "admin" }
+```
+## 5. API Overview (Based on Actual Backend)
+
+### **Auth**
+
+| Method | Endpoint        | Description                |
+| ------ | --------------- | -------------------------- |
+| POST   | `/api/register` | Patient registration       |
+| POST   | `/api/login`    | Login → returns JWT + role |
+
+### **Admin**
+
+| Method | Endpoint                            | Purpose                       |
+| ------ | ----------------------------------- | ----------------------------- |
+| GET    | `/api/admin/summary`                | Metrics dashboard             |
+| GET    | `/api/admin/appointments`           | All appointments              |
+| GET    | `/api/admin/patients`               | All patients                  |
+| GET    | `/api/admin/doctors`                | List doctors                  |
+| POST   | `/api/admin/doctors`                | Add doctor                    |
+| GET    | `/api/admin/run-simulation-task`    | Trigger background simulation |
+| GET    | `/api/admin/simulation-task-status` | Check simulation status       |
+
+### **Doctor**
+
+| Method | Endpoint                        |
+| ------ | ------------------------------- |
+| GET    | `/api/doctor/appointments`      |
+| PUT    | `/api/doctor/appointments/<id>` |
+
+### **Patient**
+
+| Method | Endpoint                         |
+| ------ | -------------------------------- |
+| POST   | `/api/patient/appointments`      |
+| GET    | `/api/patient/appointments`      |
+| PUT    | `/api/patient/appointments/<id>` |
+
+## 6. Frontend Screens
+
+### Built from vue files
+
+* `AdminDashboard.vue`
+* `DoctorDashboard.vue`
+* `PatientDashboard.vue`
+* `LoginView.vue`
+* `RegisterView.vue`
+
+The system includes:
+
+* 2-second animated splash screen
+* Navigation bar with dynamic role buttons
+* Appointment tables
+* Status filters
+* Doctor add/edit/remove modals
+* Patient booking UI
+* Doctor treatment update UI
+
+## 🛠 7. How to Run (Backend)
+
+```bash
+cd backend
 python -m venv venv
-  venv\Scripts\activate
-
-# 2. Install Python dependencies
+venv/Scripts/activate
 pip install -r requirements.txt
+python app.py
+```
 
-# 3. Initialize database (creates admin user)
-flask --app app.py init-db
+Backend runs at: http://localhost:5000
 
-# 4. Run Flask API
-flask --app app.py run
+Admin auto-created on first seed run:
+**username:** admin
+**password:** admin 
 
-# API base URL: http://localhost:5000/api
+---
 
-5. How to Run (Frontend – VueJS)
-cd frontend
+## 8. How to Run (Frontend)
+
+```bash
+cd frontend/hmsvue
 npm install
-npm run dev  
-# Frontend URL: http://localhost:5173
+npm run dev
+```
 
-6. OpenAPI Specification
+Frontend runs at: http://localhost:5173
 
-The file api.yaml documents the:
-Auth endpoints (/api/auth/login, /api/auth/register)
-Doctor management (/api/doctors/...)
-Patient booking (/api/appointments/...)
-Analytics endpoints for charts
+## 9. Testing Checklist
+
+* Login as patient → book appointment → reschedule → cancel
+* Login as doctor → complete appointment → add diagnosis/prescription
+* Login as admin → verify summary counts
+* Admin → add doctor → edit doctor → remove doctor
+* Admin → run simulation → check status
+* Refresh browser: role stays synced due to localStorage
+* Double-booking prevented (backend validated)
+* Invalid doctor IDs blocked
+* Auth guard correctly redirects unauthorized roles
+
+## 10. Notes
+
+* SQLite DB auto-created on first run
+* Simulation uses Python threads (non-blocking)
+* Appointment conflicts prevented at backend level
+* Roles fully isolated (Admin cannot access doctor endpoints, etc.)
+
+## 11. Conclusion
+
+This project delivers a complete hospital workflow:
+
+* registration,
+* booking,
+* treatment,
+* role-specific dashboards,
+* and admin-level management tools.
